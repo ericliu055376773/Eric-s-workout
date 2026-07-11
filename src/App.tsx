@@ -17,7 +17,8 @@ import {
   Target, 
   Clock,
   Flame,
-  Timer
+  Timer,
+  Weight // 新增體重圖示
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -57,6 +58,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'fitness-tracker-app-
 const DEFAULT_SETTINGS = {
   parts: ['胸', '背', '腿', '肩', '手', '核心', '有氧', '休息'],
   restTimer: 60,
+  targetWeight: 70, // 新增：預設目標體重
   supplementPeriods: ['起床', '早餐', '午餐', '晚餐', '練前', '練中', '練後', '睡前', '隨時'],
   supplements: {
     '起床': ['綜合維他命', 'B群', '益生菌'],
@@ -92,6 +94,7 @@ export default function FitnessApp() {
   const [trainingParts, setTrainingParts] = useState([]);
   const [dailyExercises, setDailyExercises] = useState([]);
   const [supplements, setSupplements] = useState({});
+  const [dailyWeight, setDailyWeight] = useState(''); // 新增：當日體重
   
   // UI 狀態
   const [saving, setSaving] = useState(false);
@@ -299,10 +302,12 @@ export default function FitnessApp() {
       setTrainingParts(log.trainingParts || []);
       setDailyExercises(log.exercises || []);
       setSupplements(log.supplements || {});
+      setDailyWeight(log.weight || ''); // 載入體重
     } else {
       setTrainingParts([]);
       setDailyExercises([]);
       setSupplements({});
+      setDailyWeight(''); // 重置體重
     }
     setSaveSuccess(false);
     setIsDirty(false);
@@ -327,7 +332,7 @@ export default function FitnessApp() {
       handleSaveLog(true);
     }, 1500);
     return () => clearTimeout(timer);
-  }, [isDirty, trainingParts, dailyExercises, supplements]);
+  }, [isDirty, trainingParts, dailyExercises, supplements, dailyWeight]); // 加入 dailyWeight 監聽
 
   const toggleTrainingPart = (part) => {
     setTrainingParts(prev => {
@@ -375,6 +380,7 @@ export default function FitnessApp() {
         trainingParts,
         exercises: filteredExercises,
         supplements,
+        weight: dailyWeight, // 儲存體重
         updatedAt: new Date().toISOString()
       });
       setDailyExercises(filteredExercises);
@@ -596,6 +602,36 @@ export default function FitnessApp() {
                     </button>
                   );
                 })}
+              </div>
+            </section>
+
+            {/* 新增：體重紀錄區塊 */}
+            <section className="bg-zinc-900 rounded-2xl p-5 border border-zinc-800 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-pink-500/10 rounded-lg">
+                  <Weight className="text-pink-400" size={20} />
+                </div>
+                <div>
+                  <h2 className="text-sm text-zinc-300 font-bold">今日體重</h2>
+                  {settings.targetWeight && (
+                    <p className="text-[10px] text-zinc-500">目標: {settings.targetWeight} kg</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={dailyWeight}
+                  onChange={(e) => {
+                    setDailyWeight(e.target.value);
+                    setIsDirty(true);
+                  }}
+                  placeholder="0.0"
+                  className="w-24 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-right text-lg font-bold text-pink-400 focus:outline-none focus:border-pink-500 transition-colors shadow-inner"
+                />
+                <span className="text-sm font-medium text-zinc-500">kg</span>
               </div>
             </section>
 
@@ -916,6 +952,36 @@ export default function FitnessApp() {
               </div>
             </section>
 
+            {/* 6. 目標體重設定 */}
+            <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
+              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2">
+                <Weight size={18} className="text-pink-400"/>
+                <h2 className="font-bold">6. 目標體重設定</h2>
+              </div>
+              <div className="p-4 space-y-4">
+                <div className="flex items-center gap-4 bg-zinc-950/50 rounded-xl p-3 border border-zinc-800/50">
+                  <div className="flex-1">
+                    <div className="text-sm font-bold text-zinc-300">設定目標體重</div>
+                    <div className="text-xs text-zinc-500 mt-1">設定後會顯示在首頁的體重紀錄旁</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={settings.targetWeight || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        saveSettingsToDB({ ...settings, targetWeight: val ? Number(val) : '' });
+                      }}
+                      className="w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-center text-sm font-mono text-pink-400 focus:outline-none focus:border-pink-500 shadow-inner"
+                    />
+                    <span className="text-sm text-zinc-500 font-medium">kg</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
           </div>
         )}
       </main>
@@ -927,16 +993,17 @@ export default function FitnessApp() {
             
             <button
               onClick={isTimerRunning ? stopTimer : startTimer}
-              className={`h-[60px] rounded-2xl font-bold flex flex-col items-center justify-center transition-all shadow-lg shrink-0 overflow-hidden relative ${
+              className={`flex-1 h-[60px] rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg overflow-hidden relative ${
                 isTimerRunning
-                  ? 'w-[80px] bg-zinc-900 border-2 border-yellow-500/50 text-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.2)]'
-                  : 'w-[60px] bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:bg-zinc-700'
+                  ? 'bg-zinc-900 border-2 border-yellow-500/50 text-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.2)]'
+                  : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:bg-zinc-700'
               }`}
             >
+              <Timer size={24} />
               {isTimerRunning ? (
-                <span className="text-lg font-mono tracking-wider">{formatTime(timeLeft)}</span>
+                <span className="text-xl font-mono tracking-wider">{formatTime(timeLeft)}</span>
               ) : (
-                <Timer size={24} />
+                <span className="text-lg">計時器</span>
               )}
             </button>
 
@@ -956,7 +1023,7 @@ export default function FitnessApp() {
               ) : saveSuccess && !isDirty ? (
                 <>
                   <CheckCircle2 size={24} />
-                  儲存成功！
+                  已同步
                 </>
               ) : isDirty ? (
                 <>
@@ -966,7 +1033,7 @@ export default function FitnessApp() {
               ) : (
                 <>
                   <CheckCircle2 size={24} />
-                  資料已自動同步
+                  已同步
                 </>
               )}
             </button>
