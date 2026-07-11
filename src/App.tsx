@@ -24,7 +24,8 @@ import {
   Minus,
   Save,
   GripVertical,
-  Repeat
+  Repeat,
+  StopCircle
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -65,6 +66,13 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const firestoreAppId = 'fitness-tracker-app-v3';
 
+// 內建常用補給品字典
+const SUPPLEMENT_DICTIONARY = [
+  '肌酸5克', '肌酸10克', '魚油2顆', '魚油3顆', '綜合維他命', 'B群', '益生菌', 
+  '乳清蛋白1匙', '乳清蛋白2匙', 'ZMA鋅錠', 'D3+K2', '氮泵', 'Allmax咖啡因錠',
+  '瑪卡', '精氨酸', 'BCAA', 'EAA', '穀氨醯胺'
+];
+
 const DEFAULT_SETTINGS = {
   parts: ['胸', '背', '腿', '肩', '手', '核心', '有氧', '休息'],
   restTimer: 60,
@@ -72,9 +80,9 @@ const DEFAULT_SETTINGS = {
   supplementPeriods: ['起床', '早餐', '午餐', '晚餐', '練前', '練中', '練後', '睡前', '隨時'],
   supplements: {
     '起床': ['綜合維他命', 'B群', '益生菌'],
-    '練前': ['肌酸', '氮泵'],
-    '練後': ['乳清蛋白'],
-    '睡前': ['魚油', 'ZMA']
+    '練前': ['肌酸5克', '氮泵'],
+    '練後': ['乳清蛋白1匙'],
+    '睡前': ['魚油2顆', 'ZMA鋅錠']
   },
   exercises: {
     '胸': ['槓鈴平胸臥推', '啞鈴上胸臥推', '機械飛鳥', '伏地挺身'],
@@ -86,7 +94,7 @@ const DEFAULT_SETTINGS = {
     '有氧': ['跑步機', '飛輪', '橢圓機'],
     '休息': []
   },
-  cycles: [] // 新增：週期性計畫
+  cycles: [] // 週期性計畫
 };
 
 export default function FitnessApp() {
@@ -116,10 +124,10 @@ export default function FitnessApp() {
   
   const [newPeriod, setNewPeriod] = useState('');
   const [settingActivePeriod, setSettingActivePeriod] = useState('起床');
-  const [newSupp, setNewSupp] = useState('');
+  const [newSupp, setNewSupp] = useState(SUPPLEMENT_DICTIONARY[0]);
 
   const [analysisPart, setAnalysisPart] = useState('胸');
-  const [draggedPeriod, setDraggedPeriod] = useState(null); // 拖曳狀態
+  const [draggedPeriod, setDraggedPeriod] = useState(null); 
 
   function getTodayString() {
     const today = new Date();
@@ -172,7 +180,6 @@ export default function FitnessApp() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  // 計算週期狀態 (給首頁顯示用)
   const activeCyclesInfo = useMemo(() => {
     if (!settings.cycles || settings.cycles.length === 0) return [];
     
@@ -551,14 +558,13 @@ export default function FitnessApp() {
   };
 
   const handleAddSupplement = () => {
-    if (!newSupp.trim()) return;
+    if (!newSupp) return;
     const currentSuppsInPeriod = settings.supplements[settingActivePeriod] || [];
-    if (currentSuppsInPeriod.includes(newSupp.trim())) return;
+    if (currentSuppsInPeriod.includes(newSupp)) return;
     saveSettingsToDB({
       ...settings,
-      supplements: { ...settings.supplements, [settingActivePeriod]: [...currentSuppsInPeriod, newSupp.trim()] }
+      supplements: { ...settings.supplements, [settingActivePeriod]: [...currentSuppsInPeriod, newSupp] }
     });
-    setNewSupp('');
   };
 
   const handleRemoveSupplement = (period, suppName) => {
@@ -568,7 +574,6 @@ export default function FitnessApp() {
     });
   };
 
-  // 拖曳排序處理
   const handleDragStart = (e, period) => {
     setDraggedPeriod(period);
     e.dataTransfer.effectAllowed = 'move';
@@ -594,7 +599,6 @@ export default function FitnessApp() {
     setDraggedPeriod(null);
   };
 
-  // 新增預設肌酸循環
   const addDefaultCreatineCycle = () => {
     const newCycle = {
       id: Date.now().toString(),
@@ -622,7 +626,26 @@ export default function FitnessApp() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans pb-28">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans pb-28 relative">
+      
+      {/* 專注倒數遮罩層 */}
+      {isTimerRunning && (
+        <div className="fixed inset-0 z-[100] bg-zinc-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="text-zinc-400 font-bold mb-6 flex items-center gap-2 text-xl tracking-widest">
+            <Timer className="animate-pulse text-yellow-500" size={28} /> 休息時間
+          </div>
+          <div className="text-9xl font-black font-mono text-yellow-400 tracking-tighter mb-16 drop-shadow-[0_0_40px_rgba(234,179,8,0.4)]">
+            {formatTime(timeLeft)}
+          </div>
+          <button 
+            onClick={stopTimer}
+            className="flex items-center gap-3 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border-2 border-red-500/30 px-8 py-4 rounded-full font-bold text-lg transition-all active:scale-95"
+          >
+            <StopCircle size={24} /> 停止計時
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-zinc-900 border-b border-zinc-800 sticky top-0 z-20 shadow-md">
         <div className="max-w-md mx-auto px-4 py-4 flex items-center justify-between">
@@ -1025,7 +1048,9 @@ export default function FitnessApp() {
                   <select value={settingActivePeriod} onChange={(e) => setSettingActivePeriod(e.target.value)} className="bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-blue-500">
                     {(settings.supplementPeriods || []).map(p => (<option key={p} value={p}>{p}</option>))}
                   </select>
-                  <input type="text" value={newSupp} onChange={(e) => setNewSupp(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddSupplement()} placeholder="新增補品..." className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500" />
+                  <select value={newSupp} onChange={(e) => setNewSupp(e.target.value)} className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-zinc-200">
+                    {SUPPLEMENT_DICTIONARY.map(supp => (<option key={supp} value={supp}>{supp}</option>))}
+                  </select>
                   <button onClick={handleAddSupplement} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0">新增</button>
                 </div>
                 <div className="space-y-3">
@@ -1125,9 +1150,9 @@ export default function FitnessApp() {
       {view === 'main' && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent pointer-events-none z-10">
           <div className="max-w-md mx-auto pointer-events-auto flex gap-3">
-            <button onClick={isTimerRunning ? stopTimer : startTimer} className={`w-[80px] h-[60px] rounded-2xl font-bold flex flex-col items-center justify-center gap-0.5 transition-all shadow-lg overflow-hidden relative shrink-0 ${isTimerRunning ? 'bg-zinc-900 border-2 border-yellow-500/50 text-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.2)]' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:bg-zinc-700'}`}>
+            <button onClick={startTimer} disabled={isTimerRunning} className={`flex-1 h-[60px] rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg overflow-hidden relative shrink-0 bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:bg-zinc-700`}>
               <Timer size={20} />
-              {isTimerRunning ? <span className="text-sm font-mono tracking-wider">{formatTime(timeLeft)}</span> : <span className="text-[10px]">計時</span>}
+              <span className="text-base">計時 ({settings.restTimer}s)</span>
             </button>
             <button onClick={() => handleSaveLog(false)} disabled={saving || (!isDirty && saveSuccess)} className={`flex-1 h-[60px] rounded-2xl font-bold text-base flex items-center justify-center gap-2 transition-all duration-300 shadow-xl ${saveSuccess && !isDirty ? 'bg-emerald-900/40 border border-emerald-500/30 text-emerald-400' : isDirty ? 'bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95' : 'bg-zinc-800 text-zinc-500 border border-zinc-700'}`}>
               {saving ? <Loader2 className="animate-spin" size={20} /> : saveSuccess && !isDirty ? <><CheckCircle2 size={20} />資料已自動同步</> : isDirty ? <><Save size={20} />未同步 (將自動儲存)</> : <><CheckCircle2 size={20} />資料已自動同步</>}
