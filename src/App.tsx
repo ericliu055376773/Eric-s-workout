@@ -66,7 +66,7 @@ const db = getFirestore(app);
 const firestoreAppId = 'fitness-tracker-app-v3';
 
 // ====== 在這裡設定你的密碼 ======
-const APP_PASSWORD = '1234';     // 改成你自己的密碼
+const APP_PASSWORD = '000';      // 改成你自己的密碼
 const FIXED_USER_ID = 'eric';    // 固定的使用者 ID，資料都存在這個路徑下
 // ================================
 
@@ -698,7 +698,7 @@ export default function FitnessApp() {
               onChange={(e) => { setInputPassword(e.target.value); setPasswordError(''); }}
               onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
               placeholder="密碼"
-              className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-center tracking-widest focus:outline-none focus:border-emerald-500 transition-colors"
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-base text-center tracking-widest focus:outline-none focus:border-emerald-500 transition-colors"
             />
           </div>
 
