@@ -18,7 +18,9 @@ import {
   Clock,
   Flame,
   Timer,
-  Weight // 新增體重圖示
+  Weight,
+  TrendingUp,
+  History
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -34,31 +36,37 @@ import {
   setDoc, 
   onSnapshot 
 } from 'firebase/firestore';
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  ReferenceLine 
+} from 'recharts';
 
 // --- Firebase 初始化 ---
-// ⚠️ 已經填入您的 Firebase 專案設定
 const firebaseConfig = {
-  apiKey: "AIzaSyA6uB6guqyv1DZI51AzmQ3plXdOFEkHRm0",
-  authDomain: "ertic-workout.firebaseapp.com",
-  projectId: "ertic-workout",
-  storageBucket: "ertic-workout.firebasestorage.app",
-  messagingSenderId: "555462032713",
-  appId: "1:555462032713:web:20160aa28994dfa443ae98"
+  apiKey: 'AIzaSyA6uB6guqyv1DZI51AzmQ3plXdOFEkHRm0',
+  authDomain: 'ertic-workout.firebaseapp.com',
+  projectId: 'ertic-workout',
+  storageBucket: 'ertic-workout.firebasestorage.app',
+  messagingSenderId: '555462032713',
+  appId: '1:555462032713:web:20160aa28994dfa443ae98'
 };
 
-// 檢查是否有設定檔，避免無設定時傳入空物件導致全站白畫面崩潰
-const isFirebaseConfigured = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("請填寫");
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = 'fitness-tracker-app-v3';
 
-const app = isFirebaseConfigured ? initializeApp(firebaseConfig) : null;
-const auth = isFirebaseConfigured ? getAuth(app) : null;
-const db = isFirebaseConfigured ? getFirestore(app) : null;
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'fitness-tracker-app-v3';
-
-// 預設設定資料 (升級為支援自訂部位與分段補品)
+// 預設設定資料
 const DEFAULT_SETTINGS = {
   parts: ['胸', '背', '腿', '肩', '手', '核心', '有氧', '休息'],
   restTimer: 60,
-  targetWeight: 70, // 新增：預設目標體重
+  targetWeight: 70, 
   supplementPeriods: ['起床', '早餐', '午餐', '晚餐', '練前', '練中', '練後', '睡前', '隨時'],
   supplements: {
     '起床': ['綜合維他命', 'B群', '益生菌'],
@@ -81,31 +89,24 @@ const DEFAULT_SETTINGS = {
 export default function FitnessApp() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState('main'); // 'main' | 'settings'
+  const [view, setView] = useState('main'); // 'main' | 'settings' | 'weightAnalytics' | 'trainingAnalytics'
   
-  // 設定狀態
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  
-  // 日誌與時間狀態
   const [allLogs, setAllLogs] = useState({});
   const [selectedDate, setSelectedDate] = useState(getTodayString());
   
-  // 當日表單狀態
   const [trainingParts, setTrainingParts] = useState([]);
   const [dailyExercises, setDailyExercises] = useState([]);
   const [supplements, setSupplements] = useState({});
-  const [dailyWeight, setDailyWeight] = useState(''); // 新增：當日體重
+  const [dailyWeight, setDailyWeight] = useState(''); 
   
-  // UI 狀態
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [isDirty, setIsDirty] = useState(false); // 防呆機制：追蹤是否有未儲存的變更
+  const [isDirty, setIsDirty] = useState(false); 
 
-  // 計時器狀態
   const [timeLeft, setTimeLeft] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
 
-  // 後台專用狀態
   const [newPart, setNewPart] = useState('');
   const [settingActivePart, setSettingActivePart] = useState('胸');
   const [newExercise, setNewExercise] = useState('');
@@ -113,6 +114,8 @@ export default function FitnessApp() {
   const [newPeriod, setNewPeriod] = useState('');
   const [settingActivePeriod, setSettingActivePeriod] = useState('起床');
   const [newSupp, setNewSupp] = useState('');
+
+  const [analysisPart, setAnalysisPart] = useState('胸');
 
   function getTodayString() {
     const today = new Date();
@@ -225,6 +228,94 @@ export default function FitnessApp() {
     };
   }, [allLogs, selectedDate, totalDailyWeight]);
 
+  const weightAnalytics = useMemo(() => {
+    const data = [];
+    Object.keys(allLogs).forEach(date => {
+      if (allLogs[date].weight) {
+        data.push({
+          date: date.substring(5), 
+          fullDate: date,
+          weight: Number(allLogs[date].weight)
+        });
+      }
+    });
+    
+    data.sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+
+    if (data.length === 0) return { data: [], latest: 0, highest: 0, lowest: 0 };
+
+    const weights = data.map(d => d.weight);
+    const latest = weights[weights.length - 1];
+    const highest = Math.max(...weights);
+    const lowest = Math.min(...weights);
+
+    return { data, latest, highest, lowest };
+  }, [allLogs]);
+
+  const partAnalytics = useMemo(() => {
+    const logsList = Object.values(allLogs)
+      .sort((a, b) => b.date.localeCompare(a.date)); // Sort by date descending
+
+    let currentLog = null;
+    let previousLog = null;
+
+    // Find the latest log containing the specific part
+    for (const log of logsList) {
+      if (log.trainingParts && log.trainingParts.includes(analysisPart) && log.exercises) {
+        if (!currentLog) {
+          currentLog = log;
+        } else if (!previousLog) {
+          previousLog = log;
+          break; // Found both current and previous, we can stop
+        }
+      }
+    }
+
+    // Function to calculate total volume for a specific part in a log
+    const calcVolume = (log, part) => {
+      if (!log || !log.exercises) return 0;
+      return log.exercises
+        .filter(ex => ex.part === part)
+        .reduce((sum, ex) => sum + (Number(ex.sets) * Number(ex.weight)), 0);
+    };
+
+    const currentVolume = calcVolume(currentLog, analysisPart);
+    const previousVolume = calcVolume(previousLog, analysisPart);
+
+    // If the currently selected date is today and is being edited, include it in 'current' if it has the part
+    let actualCurrentVolume = currentVolume;
+    let actualCurrentDate = currentLog ? currentLog.date : '--';
+    
+    const todayLogTempVolume = dailyExercises
+      .filter(ex => ex.part === analysisPart && trainingParts.includes(analysisPart))
+      .reduce((sum, ex) => sum + (Number(ex.sets) * Number(ex.weight)), 0);
+
+    if (trainingParts.includes(analysisPart) && todayLogTempVolume > 0 && selectedDate >= (currentLog?.date || '')) {
+       actualCurrentVolume = todayLogTempVolume;
+       actualCurrentDate = selectedDate;
+       // Shift previous down if today is the new current
+       if (selectedDate !== currentLog?.date) {
+         previousLog = currentLog;
+       }
+    }
+
+    const actualPreviousVolume = calcVolume(previousLog, analysisPart);
+    const actualPreviousDate = previousLog ? previousLog.date : '--';
+
+    const diff = actualCurrentVolume - actualPreviousVolume;
+    const isIncrease = diff > 0;
+    const isDecrease = diff < 0;
+
+    return {
+      current: { volume: actualCurrentVolume, date: actualCurrentDate },
+      previous: { volume: actualPreviousVolume, date: actualPreviousDate },
+      diff: Math.abs(diff),
+      isIncrease,
+      isDecrease
+    };
+  }, [allLogs, analysisPart, dailyExercises, trainingParts, selectedDate]);
+
+
   useEffect(() => {
     if (!auth) {
       setLoading(false);
@@ -232,11 +323,7 @@ export default function FitnessApp() {
     }
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (error) {
         console.error("Auth error:", error);
       }
@@ -274,12 +361,15 @@ export default function FitnessApp() {
         if (data.supplementPeriods && !data.supplementPeriods.includes(settingActivePeriod)) {
           setSettingActivePeriod(data.supplementPeriods[0] || '');
         }
+        if (!data.parts.includes(analysisPart)) {
+          setAnalysisPart(data.parts[0] || '');
+        }
       } else {
         setDoc(settingsRef, DEFAULT_SETTINGS);
       }
     });
     return () => unsubscribe();
-  }, [user, settingActivePart, settingActivePeriod]);
+  }, [user, settingActivePart, settingActivePeriod, analysisPart]);
 
   useEffect(() => {
     if (!user || !db) return;
@@ -302,12 +392,12 @@ export default function FitnessApp() {
       setTrainingParts(log.trainingParts || []);
       setDailyExercises(log.exercises || []);
       setSupplements(log.supplements || {});
-      setDailyWeight(log.weight || ''); // 載入體重
+      setDailyWeight(log.weight || ''); 
     } else {
       setTrainingParts([]);
       setDailyExercises([]);
       setSupplements({});
-      setDailyWeight(''); // 重置體重
+      setDailyWeight(''); 
     }
     setSaveSuccess(false);
     setIsDirty(false);
@@ -332,7 +422,7 @@ export default function FitnessApp() {
       handleSaveLog(true);
     }, 1500);
     return () => clearTimeout(timer);
-  }, [isDirty, trainingParts, dailyExercises, supplements, dailyWeight]); // 加入 dailyWeight 監聽
+  }, [isDirty, trainingParts, dailyExercises, supplements, dailyWeight]);
 
   const toggleTrainingPart = (part) => {
     setTrainingParts(prev => {
@@ -380,7 +470,7 @@ export default function FitnessApp() {
         trainingParts,
         exercises: filteredExercises,
         supplements,
-        weight: dailyWeight, // 儲存體重
+        weight: dailyWeight, 
         updatedAt: new Date().toISOString()
       });
       setDailyExercises(filteredExercises);
@@ -491,20 +581,6 @@ export default function FitnessApp() {
     saveSettingsToDB(updated);
   };
 
-  if (!isFirebaseConfigured) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 text-zinc-100 p-6">
-        <div className="bg-red-900/20 border border-red-500/50 rounded-2xl p-6 max-w-md w-full shadow-lg">
-          <h2 className="text-xl font-bold text-red-400 mb-4 flex items-center gap-2">⚠️ 缺少 Firebase 設定檔</h2>
-          <div className="space-y-4 text-sm text-zinc-300 leading-relaxed">
-            <p>目前的「白畫面」是因為 React 缺少資料庫連線資訊，導致執行崩潰。</p>
-            <p>請在程式碼大約 <strong>第 35 行</strong> 的 <code className="bg-zinc-800 text-emerald-400 px-1.5 py-0.5 rounded">firebaseConfig</code> 變數中填入您的專案金鑰。</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-100">
@@ -518,15 +594,26 @@ export default function FitnessApp() {
       {/* --- Header --- */}
       <header className="bg-zinc-900 border-b border-zinc-800 sticky top-0 z-20 shadow-md">
         <div className="max-w-md mx-auto px-4 py-4 flex items-center justify-between">
-          {view === 'settings' ? (
-            <button onClick={() => setView('main')} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400 transition-colors">
-              <ArrowLeft size={24} />
-            </button>
-          ) : <div className="w-10"></div>}
+          <div className="flex gap-2">
+            {view === 'main' ? (
+              <>
+                <button onClick={() => setView('trainingAnalytics')} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-emerald-400 transition-colors">
+                  <Activity size={24} />
+                </button>
+                <button onClick={() => setView('weightAnalytics')} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-pink-400 transition-colors">
+                  <TrendingUp size={24} />
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setView('main')} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400 transition-colors">
+                <ArrowLeft size={24} />
+              </button>
+            )}
+          </div>
           
           <h1 className="text-xl font-bold text-emerald-400 flex items-center gap-2">
-            {view === 'settings' ? <Settings size={22}/> : <Flame size={22} className="text-orange-500"/>}
-            {view === 'settings' ? '設定中心' : 'Fitness Tracker'}
+            {view === 'settings' ? <Settings size={22}/> : view === 'weightAnalytics' ? <TrendingUp size={22} className="text-pink-500"/> : view === 'trainingAnalytics' ? <Activity size={22} className="text-emerald-500"/> : <Flame size={22} className="text-orange-500"/>}
+            {view === 'settings' ? '設定中心' : view === 'weightAnalytics' ? '體重分析' : view === 'trainingAnalytics' ? '訓練分析' : 'Fitness Tracker'}
           </h1>
           
           {view === 'main' ? (
@@ -538,6 +625,7 @@ export default function FitnessApp() {
 
         {view === 'main' && (
           <div className="max-w-md mx-auto px-4 pb-4 space-y-3">
+            {/* Date Selector */}
             <div className="flex items-center justify-between bg-zinc-950 rounded-xl p-2 border border-zinc-800">
               <button onClick={() => changeDate(-1)} className="p-2 hover:bg-zinc-800 rounded-md transition-colors text-zinc-400">
                 <ChevronLeft size={20} />
@@ -556,31 +644,17 @@ export default function FitnessApp() {
                 <ChevronRight size={20} />
               </button>
             </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <div className="bg-zinc-800/40 border border-zinc-700/50 rounded-xl p-3 flex flex-col items-center justify-center">
-                <span className="text-[10px] text-zinc-400 mb-1 flex items-center gap-1"><Activity size={12}/>今日</span>
-                <span className="font-bold text-zinc-100 text-lg leading-none">{totalDailyWeight.toLocaleString()}</span>
-              </div>
-              <div className="bg-emerald-900/20 border border-emerald-800/30 rounded-xl p-3 flex flex-col items-center justify-center">
-                <span className="text-[10px] text-emerald-500 mb-1 flex items-center gap-1"><Target size={12}/>本週</span>
-                <span className="font-bold text-emerald-400 text-lg leading-none">{stats.weekly.toLocaleString()}</span>
-              </div>
-              <div className="bg-blue-900/20 border border-blue-800/30 rounded-xl p-3 flex flex-col items-center justify-center">
-                <span className="text-[10px] text-blue-500 mb-1 flex items-center gap-1"><Target size={12}/>本月</span>
-                <span className="font-bold text-blue-400 text-lg leading-none">{stats.monthly.toLocaleString()}</span>
-              </div>
-            </div>
+            {/* Removed the stats cards from here */}
           </div>
         )}
       </header>
 
-      {/* --- 內容區塊 --- */}
+      {/* --- Main Content --- */}
       <main className="max-w-md mx-auto p-4 space-y-6">
         
         {view === 'main' ? (
           <>
-            {/* 訓練部位選擇 */}
+            {/* Training Parts Selection */}
             <section className="bg-zinc-900 rounded-2xl p-5 border border-zinc-800">
               <h2 className="text-sm text-zinc-400 font-medium mb-3 flex items-center gap-2">
                 <Dumbbell size={16} /> 選擇今日訓練部位
@@ -605,37 +679,7 @@ export default function FitnessApp() {
               </div>
             </section>
 
-            {/* 新增：體重紀錄區塊 */}
-            <section className="bg-zinc-900 rounded-2xl p-5 border border-zinc-800 flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-pink-500/10 rounded-lg">
-                  <Weight className="text-pink-400" size={20} />
-                </div>
-                <div>
-                  <h2 className="text-sm text-zinc-300 font-bold">今日體重</h2>
-                  {settings.targetWeight && (
-                    <p className="text-[10px] text-zinc-500">目標: {settings.targetWeight} kg</p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  value={dailyWeight}
-                  onChange={(e) => {
-                    setDailyWeight(e.target.value);
-                    setIsDirty(true);
-                  }}
-                  placeholder="0.0"
-                  className="w-24 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-right text-lg font-bold text-pink-400 focus:outline-none focus:border-pink-500 transition-colors shadow-inner"
-                />
-                <span className="text-sm font-medium text-zinc-500">kg</span>
-              </div>
-            </section>
-
-            {/* 訓練詳細菜單 */}
+            {/* Exercise Menus */}
             {trainingParts.length > 0 && (
               <section className="space-y-4">
                 {trainingParts.map(part => {
@@ -715,7 +759,7 @@ export default function FitnessApp() {
               </section>
             )}
 
-            {/* 補給品區塊 */}
+            {/* Supplements List */}
             <section className="bg-zinc-900 rounded-2xl p-5 border border-zinc-800">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm text-zinc-400 font-medium flex items-center gap-2">
@@ -760,9 +804,185 @@ export default function FitnessApp() {
                 </div>
               )}
             </section>
+
+            {}
+            <section className="bg-zinc-900 rounded-2xl p-5 border border-zinc-800 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-pink-500/10 rounded-lg">
+                  <Weight className="text-pink-400" size={20} />
+                </div>
+                <div>
+                  <h2 className="text-sm text-zinc-300 font-bold">今日體重</h2>
+                  {settings.targetWeight && (
+                    <p className="text-[10px] text-zinc-500">目標: {settings.targetWeight} kg</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={dailyWeight}
+                  onChange={(e) => {
+                    setDailyWeight(e.target.value);
+                    setIsDirty(true);
+                  }}
+                  placeholder="0.0"
+                  className="w-24 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-right text-lg font-bold text-pink-400 focus:outline-none focus:border-pink-500 transition-colors shadow-inner"
+                />
+                <span className="text-sm font-medium text-zinc-500">kg</span>
+              </div>
+            </section>
+
           </>
+        ) : view === 'trainingAnalytics' ? (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <Activity className="text-emerald-400" size={20} />
+                <h2 className="font-bold text-zinc-100">部位重量分析</h2>
+              </div>
+
+              <div className="mb-6">
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                  {settings.parts.map(part => {
+                    if (part === '休息') return null;
+                    return (
+                      <button
+                        key={part}
+                        onClick={() => setAnalysisPart(part)}
+                        className={`whitespace-nowrap px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                          analysisPart === part
+                            ? 'bg-emerald-500 text-zinc-950 shadow-md'
+                            : 'bg-zinc-950 border border-zinc-800 text-zinc-400 hover:border-zinc-600'
+                        }`}
+                      >
+                        {part}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="bg-zinc-950/50 rounded-xl border border-zinc-800 p-4 space-y-4">
+                <h3 className="text-sm text-zinc-400 text-center font-medium">【{analysisPart}】訓練總量比較</h3>
+                
+                <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center">
+                  <div className="text-center bg-zinc-900 rounded-lg p-3 border border-zinc-800">
+                    <div className="text-[10px] text-zinc-500 mb-1">上次紀錄 ({partAnalytics.previous.date})</div>
+                    <div className="text-xl font-bold text-zinc-300">{partAnalytics.previous.volume.toLocaleString()}</div>
+                  </div>
+                  
+                  <div className="text-zinc-600">
+                    <ArrowLeft size={20} className="rotate-180" />
+                  </div>
+
+                  <div className="text-center bg-zinc-900 rounded-lg p-3 border border-emerald-500/30">
+                    <div className="text-[10px] text-emerald-500 mb-1">最新紀錄 ({partAnalytics.current.date})</div>
+                    <div className="text-xl font-bold text-emerald-400">{partAnalytics.current.volume.toLocaleString()}</div>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-center">
+                   {partAnalytics.current.date === '--' && partAnalytics.previous.date === '--' ? (
+                     <span className="text-sm text-zinc-500">尚無訓練紀錄</span>
+                   ) : partAnalytics.isIncrease ? (
+                     <div className="flex items-center gap-1 text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full text-sm font-medium">
+                       <TrendingUp size={16} /> 進步了 {partAnalytics.diff.toLocaleString()} kg!
+                     </div>
+                   ) : partAnalytics.isDecrease ? (
+                     <div className="flex items-center gap-1 text-red-400 bg-red-400/10 px-3 py-1 rounded-full text-sm font-medium">
+                       <TrendingUp size={16} className="rotate-180" /> 退步了 {partAnalytics.diff.toLocaleString()} kg
+                     </div>
+                   ) : (
+                     <div className="flex items-center gap-1 text-zinc-400 bg-zinc-800 px-3 py-1 rounded-full text-sm font-medium">
+                       持平
+                     </div>
+                   )}
+                </div>
+              </div>
+            </section>
+
+            <section className="grid grid-cols-2 gap-3">
+              <div className="bg-zinc-900 border border-emerald-800/30 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm">
+                <span className="text-xs text-emerald-500 mb-2 flex items-center gap-1"><Target size={14}/>本週總重量</span>
+                <span className="font-bold text-emerald-400 text-2xl leading-none">{stats.weekly.toLocaleString()}</span>
+              </div>
+              <div className="bg-zinc-900 border border-blue-800/30 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm">
+                <span className="text-xs text-blue-500 mb-2 flex items-center gap-1"><Target size={14}/>本月總重量</span>
+                <span className="font-bold text-blue-400 text-2xl leading-none">{stats.monthly.toLocaleString()}</span>
+              </div>
+            </section>
+          </div>
+        ) : view === 'weightAnalytics' ? (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-6">
+                <TrendingUp className="text-pink-400" size={20} />
+                <h2 className="font-bold text-zinc-100">體重趨勢分析</h2>
+              </div>
+              
+              {weightAnalytics.data.length === 0 ? (
+                <div className="text-center py-12 text-zinc-500 text-sm bg-zinc-950/50 rounded-xl border border-dashed border-zinc-800">
+                  <Weight className="mx-auto mb-2 opacity-50" size={32} />
+                  目前還沒有任何體重紀錄喔！<br/>回到首頁輸入體重開始追蹤。
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                    <div className="bg-zinc-950/50 p-3 rounded-xl border border-zinc-800">
+                      <div className="text-xs text-zinc-500 mb-1">最新體重</div>
+                      <div className="text-xl font-bold text-pink-400">{weightAnalytics.latest} kg</div>
+                    </div>
+                    <div className="bg-zinc-950/50 p-3 rounded-xl border border-zinc-800">
+                      <div className="text-xs text-zinc-500 mb-1">距離目標 ({settings.targetWeight}kg)</div>
+                      <div className="text-xl font-bold text-zinc-200">
+                        {settings.targetWeight ? (
+                          (weightAnalytics.latest - settings.targetWeight) > 0 
+                            ? `+${(weightAnalytics.latest - settings.targetWeight).toFixed(1)} kg`
+                            : `${(weightAnalytics.latest - settings.targetWeight).toFixed(1)} kg`
+                        ) : '--'}
+                      </div>
+                    </div>
+                    <div className="bg-zinc-950/50 p-3 rounded-xl border border-zinc-800">
+                      <div className="text-xs text-zinc-500 mb-1">歷史最高</div>
+                      <div className="text-lg font-bold text-zinc-300">{weightAnalytics.highest} kg</div>
+                    </div>
+                    <div className="bg-zinc-950/50 p-3 rounded-xl border border-zinc-800">
+                      <div className="text-xs text-zinc-500 mb-1">歷史最低</div>
+                      <div className="text-lg font-bold text-zinc-300">{weightAnalytics.lowest} kg</div>
+                    </div>
+                  </div>
+
+                  {weightAnalytics.data.length >= 2 ? (
+                    <div className="h-64 w-full bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 pt-8">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={weightAnalytics.data}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                          <XAxis dataKey="date" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
+                          <YAxis domain={['dataMin - 1', 'dataMax + 1']} stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} width={30} />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
+                            itemStyle={{ color: '#f472b6' }}
+                          />
+                          {settings.targetWeight && (
+                            <ReferenceLine y={settings.targetWeight} stroke="#10b981" strokeDasharray="3 3" label={{ position: 'top', value: '目標', fill: '#10b981', fontSize: 10 }} />
+                          )}
+                          <Line type="monotone" dataKey="weight" stroke="#f472b6" strokeWidth={3} dot={{ fill: '#f472b6', strokeWidth: 2, r: 4 }} activeDot={{ r: 6 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-zinc-500 text-xs bg-zinc-950/50 rounded-xl border border-zinc-800">
+                      需要至少兩天的體重紀錄才能繪製趨勢線喔！
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          </div>
         ) : (
-          /* ================= 後台設定 ================= */
           <div className="space-y-6">
             
             {/* 1. 訓練大部位管理 */}
@@ -986,7 +1206,7 @@ export default function FitnessApp() {
         )}
       </main>
 
-      {/* 浮動儲存按鈕 (僅首頁顯示) */}
+      {/* Floating Save Button (Only visible on main page) */}
       {view === 'main' && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent pointer-events-none z-10">
           <div className="max-w-md mx-auto pointer-events-auto flex gap-3">
@@ -1028,7 +1248,7 @@ export default function FitnessApp() {
               ) : isDirty ? (
                 <>
                   <Save size={24} />
-                  手動儲存
+                  未同步
                 </>
               ) : (
                 <>
