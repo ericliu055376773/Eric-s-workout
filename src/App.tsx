@@ -1277,9 +1277,10 @@ export default function FitnessApp() {
       {view === 'main' && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent pointer-events-none z-10">
           <div className="max-w-md mx-auto pointer-events-auto flex gap-3">
-            <button onClick={startTimer} disabled={isTimerRunning} className={`flex-1 h-[60px] rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg overflow-hidden relative shrink-0 ${isTimerRunning ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:bg-zinc-700'}`}>
+            <button onClick={startTimer} className={`flex-1 h-[60px] rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg overflow-hidden relative shrink-0 ${isTimerRunning ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 active:scale-95' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:bg-zinc-700'}`}>
               <Timer size={20} className={isTimerRunning ? 'animate-pulse' : ''} />
               <span className="text-base">{isTimerRunning ? `休息中 ${formatTime(timeLeft)}` : `計時 (${settings.restTimer}s)`}</span>
+              {isTimerRunning && <span className="text-xs text-yellow-500/70 absolute bottom-1.5">點擊重新計時</span>}
             </button>
             <button onClick={() => handleSaveLog(false)} disabled={saving || (!isDirty && saveSuccess)} className={`flex-1 h-[60px] rounded-2xl font-bold text-base flex items-center justify-center gap-2 transition-all duration-300 shadow-xl ${saveSuccess && !isDirty ? 'bg-emerald-900/40 border border-emerald-500/30 text-emerald-400' : isDirty ? 'bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95' : 'bg-zinc-800 text-zinc-500 border border-zinc-700'}`}>
               {saving ? <Loader2 className="animate-spin" size={20} /> : saveSuccess && !isDirty ? <><CheckCircle2 size={20} />資料已自動同步</> : isDirty ? <><Save size={20} />未同步 (將自動儲存)</> : <><CheckCircle2 size={20} />資料已自動同步</>}
