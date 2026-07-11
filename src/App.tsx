@@ -21,7 +21,8 @@ import {
   TrendingUp,
   TrendingDown,
   History,
-  Minus
+  Minus,
+  Save // 加入了之前遺漏的 Save 圖示
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
