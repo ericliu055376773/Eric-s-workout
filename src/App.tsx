@@ -4,7 +4,6 @@ import {
   ChevronRight, 
   Dumbbell, 
   Pill, 
-  Save, 
   Calendar,
   CheckCircle2,
   Loader2,
@@ -14,13 +13,15 @@ import {
   Trash2,
   ArrowLeft,
   Activity,
-  Target, 
+  Target,
   Clock,
   Flame,
   Timer,
   Weight,
   TrendingUp,
-  History
+  TrendingDown,
+  History,
+  Minus
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -60,7 +61,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = 'fitness-tracker-app-v3';
+const firestoreAppId = 'fitness-tracker-app-v3';
 
 // 預設設定資料
 const DEFAULT_SETTINGS = {
@@ -89,7 +90,7 @@ const DEFAULT_SETTINGS = {
 export default function FitnessApp() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState('main'); // 'main' | 'settings' | 'weightAnalytics' | 'trainingAnalytics'
+  const [view, setView] = useState('main'); 
   
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [allLogs, setAllLogs] = useState({});
@@ -168,66 +169,77 @@ export default function FitnessApp() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const totalDailyWeight = useMemo(() => {
-    return dailyExercises
-      .filter(ex => trainingParts.includes(ex.part))
-      .reduce((sum, ex) => sum + (Number(ex.sets) * Number(ex.weight)), 0);
-  }, [dailyExercises, trainingParts]);
+  // --- 統計分析邏輯 ---
 
-  const stats = useMemo(() => {
-    let weekly = 0;
-    let monthly = 0;
-
-    const curr = new Date(selectedDate);
-    const currentMonth = selectedDate.substring(0, 7);
-
-    const day = curr.getDay() === 0 ? 7 : curr.getDay();
-    const weekStart = new Date(curr);
-    weekStart.setDate(curr.getDate() - day + 1);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
-
-    const offset = curr.getTimezoneOffset() * 60000;
-    const weekStartStr = new Date(weekStart.getTime() - offset).toISOString().split('T')[0];
-    const weekEndStr = new Date(weekEnd.getTime() - offset).toISOString().split('T')[0];
-
-    Object.values(allLogs).forEach(log => {
-      const logDate = log.date;
-      if (!log.exercises) return;
-
-      let logTotal = 0;
-      log.exercises.forEach(ex => {
-        if (log.trainingParts && log.trainingParts.includes(ex.part)) {
-          logTotal += (Number(ex.sets) * Number(ex.weight));
+  // 1. 各部位近期的總重量 (用於訓練分析底部的卡片)
+  const latestPartsVolume = useMemo(() => {
+    const result = {};
+    const sortedDates = Object.keys(allLogs).sort((a, b) => b.localeCompare(a));
+    
+    settings.parts.forEach(part => {
+      if (part === '休息') return;
+      let found = false;
+      
+      // 先找當前畫面是否有輸入 (優先顯示今天目前的數據)
+      if (trainingParts.includes(part)) {
+        const currentVol = dailyExercises
+          .filter(e => e.part === part)
+          .reduce((sum, e) => sum + (Number(e.sets) * Number(e.weight)), 0);
+          
+        if (currentVol > 0) {
+          result[part] = { date: selectedDate, volume: currentVol };
+          found = true;
         }
-      });
-
-      if (logDate.startsWith(currentMonth)) {
-        monthly += logTotal;
       }
-      if (logDate >= weekStartStr && logDate <= weekEndStr) {
-        weekly += logTotal;
+      
+      // 畫面上沒有，往歷史紀錄找
+      if (!found) {
+        for (const date of sortedDates) {
+          const log = allLogs[date];
+          if (log.trainingParts?.includes(part)) {
+            const vol = log.exercises
+              ?.filter(e => e.part === part)
+              .reduce((sum, e) => sum + (Number(e.sets) * Number(e.weight)), 0) || 0;
+            if (vol > 0) {
+              result[part] = { date, volume: vol };
+              break;
+            }
+          }
+        }
       }
     });
+    return result;
+  }, [allLogs, settings.parts, trainingParts, dailyExercises, selectedDate]);
 
-    const savedTodayLog = allLogs[selectedDate];
-    let savedTodayTotal = 0;
-    if (savedTodayLog && savedTodayLog.exercises) {
-      savedTodayLog.exercises.forEach(ex => {
-        if (savedTodayLog.trainingParts && savedTodayLog.trainingParts.includes(ex.part)) {
-          savedTodayTotal += (Number(ex.sets) * Number(ex.weight));
+  // 2. 獲取每個動作「上次」的紀錄 (用於首頁動態顯示進步狀態)
+  const previousExercisesRecords = useMemo(() => {
+    const records = {};
+    // 只找 selectedDate "之前" 的紀錄
+    const sortedDates = Object.keys(allLogs)
+      .filter(d => d < selectedDate)
+      .sort((a, b) => b.localeCompare(a));
+
+    for (const date of sortedDates) {
+      const log = allLogs[date];
+      if (!log.exercises) continue;
+      
+      log.exercises.forEach(ex => {
+        const key = `${ex.part}_${ex.name}`;
+        // 如果這個動作還沒有被記錄到，就把這天（最接近的一次）的紀錄存起來
+        if (!records[key]) {
+          records[key] = {
+            date,
+            sets: ex.sets,
+            weight: ex.weight,
+            volume: Number(ex.sets) * Number(ex.weight)
+          };
         }
       });
     }
-    
-    const diff = totalDailyWeight - savedTodayTotal;
-    
-    return { 
-      weekly: weekly + diff, 
-      monthly: monthly + diff 
-    };
-  }, [allLogs, selectedDate, totalDailyWeight]);
+    return records;
+  }, [allLogs, selectedDate]);
 
+  // 3. 體重圖表分析
   const weightAnalytics = useMemo(() => {
     const data = [];
     Object.keys(allLogs).forEach(date => {
@@ -252,26 +264,25 @@ export default function FitnessApp() {
     return { data, latest, highest, lowest };
   }, [allLogs]);
 
+  // 4. 部位訓練總量比較 (用於訓練分析的頂部卡片)
   const partAnalytics = useMemo(() => {
     const logsList = Object.values(allLogs)
-      .sort((a, b) => b.date.localeCompare(a.date)); // Sort by date descending
+      .sort((a, b) => b.date.localeCompare(a.date)); 
 
     let currentLog = null;
     let previousLog = null;
 
-    // Find the latest log containing the specific part
     for (const log of logsList) {
       if (log.trainingParts && log.trainingParts.includes(analysisPart) && log.exercises) {
         if (!currentLog) {
           currentLog = log;
         } else if (!previousLog) {
           previousLog = log;
-          break; // Found both current and previous, we can stop
+          break; 
         }
       }
     }
 
-    // Function to calculate total volume for a specific part in a log
     const calcVolume = (log, part) => {
       if (!log || !log.exercises) return 0;
       return log.exercises
@@ -282,7 +293,6 @@ export default function FitnessApp() {
     const currentVolume = calcVolume(currentLog, analysisPart);
     const previousVolume = calcVolume(previousLog, analysisPart);
 
-    // If the currently selected date is today and is being edited, include it in 'current' if it has the part
     let actualCurrentVolume = currentVolume;
     let actualCurrentDate = currentLog ? currentLog.date : '--';
     
@@ -293,7 +303,6 @@ export default function FitnessApp() {
     if (trainingParts.includes(analysisPart) && todayLogTempVolume > 0 && selectedDate >= (currentLog?.date || '')) {
        actualCurrentVolume = todayLogTempVolume;
        actualCurrentDate = selectedDate;
-       // Shift previous down if today is the new current
        if (selectedDate !== currentLog?.date) {
          previousLog = currentLog;
        }
@@ -315,6 +324,7 @@ export default function FitnessApp() {
     };
   }, [allLogs, analysisPart, dailyExercises, trainingParts, selectedDate]);
 
+  // --- Firebase Effects ---
 
   useEffect(() => {
     if (!auth) {
@@ -339,7 +349,7 @@ export default function FitnessApp() {
 
   useEffect(() => {
     if (!user || !db) return;
-    const settingsRef = doc(db, 'artifacts', appId, 'users', user.uid, 'config', 'settings');
+    const settingsRef = doc(db, 'artifacts', firestoreAppId, 'users', user.uid, 'config', 'settings');
     const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
       if (docSnap.exists()) {
         let data = docSnap.data();
@@ -374,7 +384,7 @@ export default function FitnessApp() {
   useEffect(() => {
     if (!user || !db) return;
     setLoading(true);
-    const logsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'daily_logs');
+    const logsRef = collection(db, 'artifacts', firestoreAppId, 'users', user.uid, 'daily_logs');
     const unsubscribe = onSnapshot(logsRef, (snapshot) => {
       const logsObj = {};
       snapshot.docs.forEach(doc => {
@@ -416,6 +426,7 @@ export default function FitnessApp() {
     return () => clearInterval(interval);
   }, [isTimerRunning, timeLeft]);
 
+  // --- 自動儲存防呆機制 ---
   useEffect(() => {
     if (!isDirty || !user || !db) return;
     const timer = setTimeout(() => {
@@ -424,6 +435,7 @@ export default function FitnessApp() {
     return () => clearTimeout(timer);
   }, [isDirty, trainingParts, dailyExercises, supplements, dailyWeight]);
 
+  // --- 操作處理 ---
   const toggleTrainingPart = (part) => {
     setTrainingParts(prev => {
       if (prev.includes(part)) return prev.filter(p => p !== part);
@@ -464,7 +476,7 @@ export default function FitnessApp() {
     if (!silent) setSaving(true);
     try {
       const filteredExercises = dailyExercises.filter(ex => trainingParts.includes(ex.part));
-      const logDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'daily_logs', selectedDate);
+      const logDocRef = doc(db, 'artifacts', firestoreAppId, 'users', user.uid, 'daily_logs', selectedDate);
       await setDoc(logDocRef, {
         date: selectedDate,
         trainingParts,
@@ -489,7 +501,7 @@ export default function FitnessApp() {
   const saveSettingsToDB = async (newSettings) => {
     if (!user || !db) return;
     try {
-      const settingsRef = doc(db, 'artifacts', appId, 'users', user.uid, 'config', 'settings');
+      const settingsRef = doc(db, 'artifacts', firestoreAppId, 'users', user.uid, 'config', 'settings');
       await setDoc(settingsRef, newSettings);
     } catch (error) {
       console.error("Settings save error:", error);
@@ -625,7 +637,6 @@ export default function FitnessApp() {
 
         {view === 'main' && (
           <div className="max-w-md mx-auto px-4 pb-4 space-y-3">
-            {/* Date Selector */}
             <div className="flex items-center justify-between bg-zinc-950 rounded-xl p-2 border border-zinc-800">
               <button onClick={() => changeDate(-1)} className="p-2 hover:bg-zinc-800 rounded-md transition-colors text-zinc-400">
                 <ChevronLeft size={20} />
@@ -644,7 +655,6 @@ export default function FitnessApp() {
                 <ChevronRight size={20} />
               </button>
             </div>
-            {/* Removed the stats cards from here */}
           </div>
         )}
       </header>
@@ -712,45 +722,93 @@ export default function FitnessApp() {
                             <div></div>
                           </div>
                           
-                          {exercisesForPart.map(ex => (
-                            <div key={ex.id} className="grid grid-cols-[1fr_4rem_4rem_2rem] gap-2 items-center bg-zinc-950/50 p-2 rounded-xl border border-zinc-800/50">
-                              <select 
-                                value={ex.name}
-                                onChange={(e) => updateExercise(ex.id, 'name', e.target.value)}
-                                className="bg-zinc-800 text-sm text-zinc-200 rounded-lg p-2 border border-zinc-700 focus:outline-none focus:border-emerald-500"
-                              >
-                                <option value="" disabled>請選擇</option>
-                                {(settings.exercises[part] || []).map(opt => (
-                                  <option key={opt} value={opt}>{opt}</option>
-                                ))}
-                              </select>
-                              
-                              <input 
-                                type="number" 
-                                min="0"
-                                value={ex.sets || ''}
-                                onChange={(e) => updateExercise(ex.id, 'sets', e.target.value)}
-                                className="bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 focus:outline-none focus:border-emerald-500 w-full font-mono"
-                                placeholder="0"
-                              />
-                              
-                              <input 
-                                type="number" 
-                                min="0"
-                                value={ex.weight || ''}
-                                onChange={(e) => updateExercise(ex.id, 'weight', e.target.value)}
-                                className="bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 focus:outline-none focus:border-emerald-500 w-full font-mono"
-                                placeholder="0"
-                              />
-                              
-                              <button 
-                                onClick={() => removeExercise(ex.id)}
-                                className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors flex justify-center"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          ))}
+                          {exercisesForPart.map(ex => {
+                            // 計算並比對進步狀態
+                            const prevRecord = previousExercisesRecords[`${part}_${ex.name}`];
+                            const currentVolume = Number(ex.sets || 0) * Number(ex.weight || 0);
+                            
+                            let progressStatus = null; 
+                            let diff = 0;
+                            if (prevRecord && currentVolume > 0) {
+                              diff = currentVolume - prevRecord.volume;
+                              if (diff > 0) progressStatus = 'up';
+                              else if (diff < 0) progressStatus = 'down';
+                              else progressStatus = 'same';
+                            }
+
+                            return (
+                              <div key={ex.id} className="bg-zinc-950/50 p-2.5 rounded-xl border border-zinc-800/50 space-y-3">
+                                <div className="grid grid-cols-[1fr_4rem_4rem_2rem] gap-2 items-center">
+                                  <select 
+                                    value={ex.name}
+                                    onChange={(e) => updateExercise(ex.id, 'name', e.target.value)}
+                                    className="bg-zinc-800 text-sm text-zinc-200 rounded-lg p-2 border border-zinc-700 focus:outline-none focus:border-emerald-500"
+                                  >
+                                    <option value="" disabled>請選擇</option>
+                                    {(settings.exercises[part] || []).map(opt => (
+                                      <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                  </select>
+                                  
+                                  <input 
+                                    type="number" 
+                                    min="0"
+                                    value={ex.sets || ''}
+                                    onChange={(e) => updateExercise(ex.id, 'sets', e.target.value)}
+                                    className="bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 focus:outline-none focus:border-emerald-500 w-full font-mono"
+                                    placeholder="0"
+                                  />
+                                  
+                                  <input 
+                                    type="number" 
+                                    min="0"
+                                    value={ex.weight || ''}
+                                    onChange={(e) => updateExercise(ex.id, 'weight', e.target.value)}
+                                    className="bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 focus:outline-none focus:border-emerald-500 w-full font-mono"
+                                    placeholder="0"
+                                  />
+                                  
+                                  <button 
+                                    onClick={() => removeExercise(ex.id)}
+                                    className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors flex justify-center"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+
+                                {/* 上次紀錄與進步狀態顯示 */}
+                                <div className="bg-zinc-900/80 rounded-lg p-2 text-[11px] flex justify-between items-center border border-zinc-800/50">
+                                  {prevRecord ? (
+                                    <div className="flex items-center gap-1.5 text-zinc-400">
+                                      <History size={12} className="text-zinc-500" />
+                                      <span>上次 ({prevRecord.date.substring(5)}): {prevRecord.sets}組 x {prevRecord.weight}kg</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5 text-zinc-600">
+                                      <History size={12} />
+                                      <span>無歷史紀錄</span>
+                                    </div>
+                                  )}
+                                  
+                                  {progressStatus === 'up' && (
+                                    <div className="flex items-center gap-1 text-yellow-400 font-bold bg-yellow-400/10 px-2 py-0.5 rounded-full">
+                                      <TrendingUp size={12} /> 進步 {diff}kg
+                                    </div>
+                                  )}
+                                  {progressStatus === 'down' && (
+                                    <div className="flex items-center gap-1 text-red-400 font-bold bg-red-400/10 px-2 py-0.5 rounded-full">
+                                      <TrendingDown size={12} /> 退步 {Math.abs(diff)}kg
+                                    </div>
+                                  )}
+                                  {progressStatus === 'same' && (
+                                    <div className="flex items-center gap-1 text-zinc-500 font-bold bg-zinc-800 px-2 py-0.5 rounded-full">
+                                      <Minus size={12} /> 持平
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -805,16 +863,16 @@ export default function FitnessApp() {
               )}
             </section>
 
-            {}
+            {/* Daily Weight Tracker */}
             <section className="bg-zinc-900 rounded-2xl p-5 border border-zinc-800 flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <div className="p-2 bg-pink-500/10 rounded-lg">
                   <Weight className="text-pink-400" size={20} />
                 </div>
                 <div>
                   <h2 className="text-sm text-zinc-300 font-bold">今日體重</h2>
                   {settings.targetWeight && (
-                    <p className="text-[10px] text-zinc-500">目標: {settings.targetWeight} kg</p>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">目標: {settings.targetWeight} kg</p>
                   )}
                 </div>
               </div>
@@ -893,25 +951,38 @@ export default function FitnessApp() {
                      </div>
                    ) : partAnalytics.isDecrease ? (
                      <div className="flex items-center gap-1 text-red-400 bg-red-400/10 px-3 py-1 rounded-full text-sm font-medium">
-                       <TrendingUp size={16} className="rotate-180" /> 退步了 {partAnalytics.diff.toLocaleString()} kg
+                       <TrendingDown size={16} /> 退步了 {partAnalytics.diff.toLocaleString()} kg
                      </div>
                    ) : (
                      <div className="flex items-center gap-1 text-zinc-400 bg-zinc-800 px-3 py-1 rounded-full text-sm font-medium">
-                       持平
+                       <Minus size={16} /> 持平
                      </div>
                    )}
                 </div>
               </div>
             </section>
 
-            <section className="grid grid-cols-2 gap-3">
-              <div className="bg-zinc-900 border border-emerald-800/30 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm">
-                <span className="text-xs text-emerald-500 mb-2 flex items-center gap-1"><Target size={14}/>本週總重量</span>
-                <span className="font-bold text-emerald-400 text-2xl leading-none">{stats.weekly.toLocaleString()}</span>
-              </div>
-              <div className="bg-zinc-900 border border-blue-800/30 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm">
-                <span className="text-xs text-blue-500 mb-2 flex items-center gap-1"><Target size={14}/>本月總重量</span>
-                <span className="font-bold text-blue-400 text-2xl leading-none">{stats.monthly.toLocaleString()}</span>
+            {/* 各部位近期重量總覽 (取代原本的週/月總重量) */}
+            <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-sm">
+              <h3 className="font-bold text-zinc-100 mb-4 flex items-center gap-2">
+                <History size={18} className="text-zinc-400" /> 各部位近期重量紀錄
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                {settings.parts.map(part => {
+                  if (part === '休息') return null;
+                  const record = latestPartsVolume[part];
+                  return (
+                    <div key={part} className="bg-zinc-950 border border-zinc-800/80 rounded-xl p-3 flex flex-col justify-center">
+                      <span className="text-xs text-zinc-400 mb-1 flex items-center justify-between">
+                        {part}
+                        <span className="text-[10px] text-zinc-600">{record ? record.date.substring(5) : '--'}</span>
+                      </span>
+                      <span className="font-bold text-zinc-200 text-xl leading-none">
+                        {record ? record.volume.toLocaleString() : 0} <span className="text-xs font-medium text-zinc-500">kg</span>
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </section>
           </div>
