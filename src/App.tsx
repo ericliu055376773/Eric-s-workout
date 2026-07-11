@@ -51,7 +51,6 @@ import {
   ReferenceLine 
 } from 'recharts';
 
-/* STREAMING_CHUNK:Configuring Firebase */
 const firebaseConfig = {
   apiKey: 'AIzaSyA6uB6guqyv1DZI51AzmQ3plXdOFEkHRm0',
   authDomain: 'ertic-workout.firebaseapp.com',
@@ -66,7 +65,6 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const firestoreAppId = 'fitness-tracker-app-v3';
 
-/* STREAMING_CHUNK:Defining Default Settings */
 const DEFAULT_SETTINGS = {
   parts: ['胸', '背', '腿', '肩', '手', '核心', '有氧', '休息'],
   restTimer: 60,
@@ -92,7 +90,6 @@ const DEFAULT_SETTINGS = {
 };
 
 export default function FitnessApp() {
-  /* STREAMING_CHUNK:Initializing State Variables */
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('main'); 
@@ -124,7 +121,6 @@ export default function FitnessApp() {
   const [analysisPart, setAnalysisPart] = useState('胸');
   const [draggedPeriod, setDraggedPeriod] = useState(null); // 拖曳狀態
 
-  /* STREAMING_CHUNK:Defining Helper Functions */
   function getTodayString() {
     const today = new Date();
     const offset = today.getTimezoneOffset() * 60000;
@@ -176,7 +172,6 @@ export default function FitnessApp() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  /* STREAMING_CHUNK:Calculating Cycle Status */
   // 計算週期狀態 (給首頁顯示用)
   const activeCyclesInfo = useMemo(() => {
     if (!settings.cycles || settings.cycles.length === 0) return [];
@@ -209,7 +204,6 @@ export default function FitnessApp() {
     });
   }, [settings.cycles, selectedDate]);
 
-  /* STREAMING_CHUNK:Calculating Analytics */
   const latestPartsVolume = useMemo(() => {
     const result = {};
     const sortedDates = Object.keys(allLogs).sort((a, b) => b.localeCompare(a));
@@ -349,7 +343,6 @@ export default function FitnessApp() {
     };
   }, [allLogs, analysisPart, dailyExercises, trainingParts, selectedDate]);
 
-  /* STREAMING_CHUNK:Firebase Effects */
   useEffect(() => {
     if (!auth) {
       setLoading(false);
@@ -447,7 +440,6 @@ export default function FitnessApp() {
     return () => clearTimeout(timer);
   }, [isDirty, trainingParts, dailyExercises, supplements, dailyWeight]);
 
-  /* STREAMING_CHUNK:Interaction Handlers */
   const toggleTrainingPart = (part) => {
     setTrainingParts(prev => {
       if (prev.includes(part)) return prev.filter(p => p !== part);
@@ -621,7 +613,6 @@ export default function FitnessApp() {
     saveSettingsToDB({ ...settings, cycles: settings.cycles.filter(c => c.id !== id) });
   };
 
-  /* STREAMING_CHUNK:Rendering UI */
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-100">
@@ -1147,4 +1138,3 @@ export default function FitnessApp() {
     </div>
   );
 }
-```eof
