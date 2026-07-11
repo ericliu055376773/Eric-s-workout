@@ -384,7 +384,9 @@ export default function FitnessApp() {
             ? Object.keys(data.supplements) 
             : DEFAULT_SETTINGS.supplementPeriods;
         }
+        if (!data.exercises) data.exercises = DEFAULT_SETTINGS.exercises;
         if (!data.restTimer) data.restTimer = DEFAULT_SETTINGS.restTimer;
+        if (data.targetWeight === undefined) data.targetWeight = DEFAULT_SETTINGS.targetWeight;
         if (!data.cycles) data.cycles = [];
         
         setSettings(data);
@@ -497,16 +499,22 @@ export default function FitnessApp() {
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 3000);
       }
-    } catch (error) { console.error("Save error:", error); } 
-    finally { if (!silent) setSaving(false); }
+    } catch (error) { 
+      console.error("Save error:", error);
+      if (!silent) alert("訓練紀錄儲存失敗，請檢查網路連線。");
+    } finally { if (!silent) setSaving(false); }
   };
 
   const saveSettingsToDB = async (newSettings) => {
     if (!user || !db) return;
+    setSettings(newSettings); // 立即更新本地狀態，避免 race condition
     try {
       const settingsRef = doc(db, 'artifacts', firestoreAppId, 'users', user.uid, 'config', 'settings');
       await setDoc(settingsRef, newSettings);
-    } catch (error) { console.error("Settings save error:", error); }
+    } catch (error) { 
+      console.error("Settings save error:", error);
+      alert("設定儲存失敗，請檢查網路連線或重新整理頁面。");
+    }
   };
 
   const handleAddPart = () => {
