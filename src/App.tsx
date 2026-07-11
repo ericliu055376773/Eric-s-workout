@@ -31,7 +31,6 @@ import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
   signInAnonymously, 
-  signInWithCustomToken, 
   onAuthStateChanged 
 } from 'firebase/auth';
 import { 
@@ -65,6 +64,11 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const firestoreAppId = 'fitness-tracker-app-v3';
+
+// ====== 在這裡設定你的密碼 ======
+const APP_PASSWORD = '1234';     // 改成你自己的密碼
+const FIXED_USER_ID = 'eric';    // 固定的使用者 ID，資料都存在這個路徑下
+// ================================
 
 // 內建常用補給品字典
 const SUPPLEMENT_DICTIONARY = [
@@ -103,9 +107,14 @@ const DEFAULT_SETTINGS = {
 };
 
 export default function FitnessApp() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(null);        // Firebase 匿名用戶（背景）
+  const [unlocked, setUnlocked] = useState(false); // 本地密碼是否已解鎖
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('main'); 
+  
+  // 密碼鎖相關
+  const [inputPassword, setInputPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [allLogs, setAllLogs] = useState({});
@@ -358,6 +367,7 @@ export default function FitnessApp() {
     };
   }, [allLogs, analysisPart, dailyExercises, trainingParts, selectedDate]);
 
+  // 背景匿名登入 Firebase（只為了 Firestore 讀寫權限）
   useEffect(() => {
     if (!auth) {
       setLoading(false);
@@ -374,14 +384,29 @@ export default function FitnessApp() {
     
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (!currentUser) setLoading(false);
+      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
+  const handleUnlock = () => {
+    if (inputPassword === APP_PASSWORD) {
+      setUnlocked(true);
+      setPasswordError('');
+    } else {
+      setPasswordError('密碼錯誤');
+    }
+  };
+
+  const handleLock = () => {
+    setUnlocked(false);
+    setInputPassword('');
+    setView('main');
+  };
+
   useEffect(() => {
-    if (!user || !db) return;
-    const settingsRef = doc(db, 'artifacts', firestoreAppId, 'users', user.uid, 'config', 'settings');
+    if (!unlocked || !user || !db) return;
+    const settingsRef = doc(db, 'artifacts', firestoreAppId, 'users', FIXED_USER_ID, 'config', 'settings');
     const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
       if (docSnap.exists()) {
         let data = docSnap.data();
@@ -409,12 +434,12 @@ export default function FitnessApp() {
       }
     });
     return () => unsubscribe();
-  }, [user]);
+  }, [unlocked, user]);
 
   useEffect(() => {
-    if (!user || !db) return;
+    if (!unlocked || !user || !db) return;
     setLoading(true);
-    const logsRef = collection(db, 'artifacts', firestoreAppId, 'users', user.uid, 'daily_logs');
+    const logsRef = collection(db, 'artifacts', firestoreAppId, 'users', FIXED_USER_ID, 'daily_logs');
     const unsubscribe = onSnapshot(logsRef, (snapshot) => {
       const logsObj = {};
       snapshot.docs.forEach(doc => { logsObj[doc.id] = doc.data(); });
@@ -422,7 +447,7 @@ export default function FitnessApp() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [user]);
+  }, [unlocked, user]);
 
   useEffect(() => {
     if (allLogs[selectedDate]) {
@@ -494,7 +519,7 @@ export default function FitnessApp() {
     if (!silent) setSaving(true);
     try {
       const filteredExercises = dailyExercises.filter(ex => trainingParts.includes(ex.part));
-      const logDocRef = doc(db, 'artifacts', firestoreAppId, 'users', user.uid, 'daily_logs', selectedDate);
+      const logDocRef = doc(db, 'artifacts', firestoreAppId, 'users', FIXED_USER_ID, 'daily_logs', selectedDate);
       await setDoc(logDocRef, {
         date: selectedDate,
         trainingParts,
@@ -519,7 +544,7 @@ export default function FitnessApp() {
     if (!user || !db) return;
     setSettings(newSettings); // 立即更新本地狀態，避免 race condition
     try {
-      const settingsRef = doc(db, 'artifacts', firestoreAppId, 'users', user.uid, 'config', 'settings');
+      const settingsRef = doc(db, 'artifacts', firestoreAppId, 'users', FIXED_USER_ID, 'config', 'settings');
       await setDoc(settingsRef, newSettings);
     } catch (error) { 
       console.error("Settings save error:", error);
@@ -656,28 +681,62 @@ export default function FitnessApp() {
     );
   }
 
+  if (!unlocked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-100 p-4">
+        <div className="w-full max-w-sm space-y-6">
+          <div className="text-center space-y-2">
+            <div className="text-5xl">🏋️</div>
+            <h1 className="text-2xl font-bold text-emerald-400">Fitness Tracker</h1>
+            <p className="text-zinc-500 text-sm">請輸入密碼進入</p>
+          </div>
+          
+          <div className="space-y-3">
+            <input
+              type="password"
+              value={inputPassword}
+              onChange={(e) => { setInputPassword(e.target.value); setPasswordError(''); }}
+              onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
+              placeholder="密碼"
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-center tracking-widest focus:outline-none focus:border-emerald-500 transition-colors"
+            />
+          </div>
+
+          {passwordError && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-400 text-sm text-center">
+              {passwordError}
+            </div>
+          )}
+
+          <button
+            onClick={handleUnlock}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-bold text-sm transition-colors"
+          >
+            解鎖
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans pb-28 relative">
       
-      {/* 專注倒數遮罩層 */}
-      {(isTimerRunning || isTimerAlarm) && (
+      {/* 計時器時間到遮罩 — 必須手動關閉 */}
+      {isTimerAlarm && (
         <div className="fixed inset-0 z-[100] bg-zinc-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
           <div className="text-zinc-400 font-bold mb-6 flex items-center gap-2 text-xl tracking-widest">
-            <Timer className={`${isTimerAlarm ? 'animate-bounce text-red-500' : 'animate-pulse text-yellow-500'}`} size={28} /> 
-            {isTimerAlarm ? '時間到！' : '休息時間'}
+            <Timer className="animate-bounce text-red-500" size={28} /> 
+            時間到！
           </div>
-          <div className={`text-9xl font-black font-mono tracking-tighter mb-16 ${isTimerAlarm ? 'text-red-400 animate-pulse drop-shadow-[0_0_40px_rgba(239,68,68,0.5)]' : 'text-yellow-400 drop-shadow-[0_0_40px_rgba(234,179,8,0.4)]'}`}>
-            {isTimerAlarm ? '0:00' : formatTime(timeLeft)}
+          <div className="text-9xl font-black font-mono tracking-tighter mb-16 text-red-400 animate-pulse drop-shadow-[0_0_40px_rgba(239,68,68,0.5)]">
+            0:00
           </div>
           <button 
             onClick={stopTimer}
-            className={`flex items-center gap-3 px-8 py-4 rounded-full font-bold text-lg transition-all active:scale-95 ${
-              isTimerAlarm 
-                ? 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/30' 
-                : 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border-2 border-red-500/30'
-            }`}
+            className="flex items-center gap-3 px-8 py-4 rounded-full font-bold text-lg transition-all active:scale-95 bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/30"
           >
-            {isTimerAlarm ? <><CheckCircle2 size={24} /> 確認，繼續訓練</> : <><StopCircle size={24} /> 停止計時</>}
+            <CheckCircle2 size={24} /> 確認，繼續訓練
           </button>
         </div>
       )}
@@ -1198,6 +1257,18 @@ export default function FitnessApp() {
               </div>
             </section>
 
+            {/* 鎖定 */}
+            <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
+              <div className="p-4">
+                <button
+                  onClick={handleLock}
+                  className="w-full bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 py-3 rounded-xl font-bold text-sm transition-colors"
+                >
+                  🔒 鎖定 App
+                </button>
+              </div>
+            </section>
+
           </div>
         )}
       </main>
@@ -1206,9 +1277,9 @@ export default function FitnessApp() {
       {view === 'main' && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent pointer-events-none z-10">
           <div className="max-w-md mx-auto pointer-events-auto flex gap-3">
-            <button onClick={startTimer} disabled={isTimerRunning} className={`flex-1 h-[60px] rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg overflow-hidden relative shrink-0 bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:bg-zinc-700`}>
-              <Timer size={20} />
-              <span className="text-base">計時 ({settings.restTimer}s)</span>
+            <button onClick={startTimer} disabled={isTimerRunning} className={`flex-1 h-[60px] rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg overflow-hidden relative shrink-0 ${isTimerRunning ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:bg-zinc-700'}`}>
+              <Timer size={20} className={isTimerRunning ? 'animate-pulse' : ''} />
+              <span className="text-base">{isTimerRunning ? `休息中 ${formatTime(timeLeft)}` : `計時 (${settings.restTimer}s)`}</span>
             </button>
             <button onClick={() => handleSaveLog(false)} disabled={saving || (!isDirty && saveSuccess)} className={`flex-1 h-[60px] rounded-2xl font-bold text-base flex items-center justify-center gap-2 transition-all duration-300 shadow-xl ${saveSuccess && !isDirty ? 'bg-emerald-900/40 border border-emerald-500/30 text-emerald-400' : isDirty ? 'bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95' : 'bg-zinc-800 text-zinc-500 border border-zinc-700'}`}>
               {saving ? <Loader2 className="animate-spin" size={20} /> : saveSuccess && !isDirty ? <><CheckCircle2 size={20} />資料已自動同步</> : isDirty ? <><Save size={20} />未同步 (將自動儲存)</> : <><CheckCircle2 size={20} />資料已自動同步</>}
