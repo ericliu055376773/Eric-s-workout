@@ -84,6 +84,11 @@ const DEFAULT_SETTINGS = {
     '練後': ['乳清蛋白1匙'],
     '睡前': ['魚油2顆', 'ZMA鋅錠']
   },
+  supplementDictionary: [
+    '肌酸5克', '肌酸10克', '魚油2顆', '魚油3顆', '綜合維他命', 'B群', '益生菌', 
+    '乳清蛋白1匙', '乳清蛋白2匙', 'ZMA鋅錠', 'D3+K2', '氮泵', 'Allmax咖啡因錠',
+    '瑪卡', '精氨酸', 'BCAA', 'EAA', '穀氨醯胺'
+  ],
   exercises: {
     '胸': ['槓鈴平胸臥推', '啞鈴上胸臥推', '機械飛鳥', '伏地挺身'],
     '背': ['滑輪下拉', '槓鈴划船', '引體向上', '單臂啞鈴划船'],
@@ -117,6 +122,7 @@ export default function FitnessApp() {
 
   const [timeLeft, setTimeLeft] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [isTimerAlarm, setIsTimerAlarm] = useState(false);
 
   const [newPart, setNewPart] = useState('');
   const [settingActivePart, setSettingActivePart] = useState('胸');
@@ -124,7 +130,8 @@ export default function FitnessApp() {
   
   const [newPeriod, setNewPeriod] = useState('');
   const [settingActivePeriod, setSettingActivePeriod] = useState('起床');
-  const [newSupp, setNewSupp] = useState(SUPPLEMENT_DICTIONARY[0]);
+  const [newSupp, setNewSupp] = useState('');
+  const [newDictSupp, setNewDictSupp] = useState('');
 
   const [analysisPart, setAnalysisPart] = useState('胸');
   const [draggedPeriod, setDraggedPeriod] = useState(null); 
@@ -171,6 +178,7 @@ export default function FitnessApp() {
 
   const stopTimer = () => {
     setIsTimerRunning(false);
+    setIsTimerAlarm(false);
     setTimeLeft(0);
   };
 
@@ -385,6 +393,7 @@ export default function FitnessApp() {
             : DEFAULT_SETTINGS.supplementPeriods;
         }
         if (!data.exercises) data.exercises = DEFAULT_SETTINGS.exercises;
+        if (!data.supplementDictionary) data.supplementDictionary = SUPPLEMENT_DICTIONARY;
         if (!data.restTimer) data.restTimer = DEFAULT_SETTINGS.restTimer;
         if (data.targetWeight === undefined) data.targetWeight = DEFAULT_SETTINGS.targetWeight;
         if (!data.cycles) data.cycles = [];
@@ -438,6 +447,7 @@ export default function FitnessApp() {
       interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
     } else if (isTimerRunning && timeLeft === 0) {
       setIsTimerRunning(false);
+      setIsTimerAlarm(true);
       playBeep();
     }
     return () => clearInterval(interval);
@@ -625,6 +635,19 @@ export default function FitnessApp() {
     saveSettingsToDB({ ...settings, cycles: settings.cycles.filter(c => c.id !== id) });
   };
 
+  const handleAddDictSupp = () => {
+    if (!newDictSupp.trim()) return;
+    const dict = settings.supplementDictionary || [];
+    if (dict.includes(newDictSupp.trim())) return;
+    saveSettingsToDB({ ...settings, supplementDictionary: [...dict, newDictSupp.trim()] });
+    setNewDictSupp('');
+  };
+
+  const handleRemoveDictSupp = (supp) => {
+    const dict = (settings.supplementDictionary || []).filter(s => s !== supp);
+    saveSettingsToDB({ ...settings, supplementDictionary: dict });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-100">
@@ -637,19 +660,24 @@ export default function FitnessApp() {
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans pb-28 relative">
       
       {/* 專注倒數遮罩層 */}
-      {isTimerRunning && (
+      {(isTimerRunning || isTimerAlarm) && (
         <div className="fixed inset-0 z-[100] bg-zinc-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
           <div className="text-zinc-400 font-bold mb-6 flex items-center gap-2 text-xl tracking-widest">
-            <Timer className="animate-pulse text-yellow-500" size={28} /> 休息時間
+            <Timer className={`${isTimerAlarm ? 'animate-bounce text-red-500' : 'animate-pulse text-yellow-500'}`} size={28} /> 
+            {isTimerAlarm ? '時間到！' : '休息時間'}
           </div>
-          <div className="text-9xl font-black font-mono text-yellow-400 tracking-tighter mb-16 drop-shadow-[0_0_40px_rgba(234,179,8,0.4)]">
-            {formatTime(timeLeft)}
+          <div className={`text-9xl font-black font-mono tracking-tighter mb-16 ${isTimerAlarm ? 'text-red-400 animate-pulse drop-shadow-[0_0_40px_rgba(239,68,68,0.5)]' : 'text-yellow-400 drop-shadow-[0_0_40px_rgba(234,179,8,0.4)]'}`}>
+            {isTimerAlarm ? '0:00' : formatTime(timeLeft)}
           </div>
           <button 
             onClick={stopTimer}
-            className="flex items-center gap-3 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border-2 border-red-500/30 px-8 py-4 rounded-full font-bold text-lg transition-all active:scale-95"
+            className={`flex items-center gap-3 px-8 py-4 rounded-full font-bold text-lg transition-all active:scale-95 ${
+              isTimerAlarm 
+                ? 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/30' 
+                : 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border-2 border-red-500/30'
+            }`}
           >
-            <StopCircle size={24} /> 停止計時
+            {isTimerAlarm ? <><CheckCircle2 size={24} /> 確認，繼續訓練</> : <><StopCircle size={24} /> 停止計時</>}
           </button>
         </div>
       )}
@@ -1057,9 +1085,10 @@ export default function FitnessApp() {
                     {(settings.supplementPeriods || []).map(p => (<option key={p} value={p}>{p}</option>))}
                   </select>
                   <select value={newSupp} onChange={(e) => setNewSupp(e.target.value)} className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-zinc-200">
-                    {SUPPLEMENT_DICTIONARY.map(supp => (<option key={supp} value={supp}>{supp}</option>))}
+                    <option value="">選擇補給品...</option>
+                    {(settings.supplementDictionary || SUPPLEMENT_DICTIONARY).map(supp => (<option key={supp} value={supp}>{supp}</option>))}
                   </select>
-                  <button onClick={handleAddSupplement} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0">新增</button>
+                  <button onClick={handleAddSupplement} disabled={!newSupp} className="bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0">新增</button>
                 </div>
                 <div className="space-y-3">
                   {(settings.supplementPeriods || []).map((period) => {
@@ -1090,9 +1119,28 @@ export default function FitnessApp() {
               </div>
             </section>
 
-            {/* 5. 休息計時器設定 */}
+            {/* 5. 補給品清單管理 */}
             <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
-              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2"><Timer size={18} className="text-yellow-400"/><h2 className="font-bold">5. 休息計時器設定</h2></div>
+              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2"><Pill size={18} className="text-green-400"/><h2 className="font-bold">5. 補給品清單管理</h2></div>
+              <div className="p-4 space-y-4">
+                <div className="flex gap-2">
+                  <input type="text" value={newDictSupp} onChange={(e) => setNewDictSupp(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddDictSupp()} placeholder="新增補給品名稱..." className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-green-500 transition-colors" />
+                  <button onClick={handleAddDictSupp} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">新增</button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(settings.supplementDictionary || SUPPLEMENT_DICTIONARY).map(supp => (
+                    <div key={supp} className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-lg pl-3 pr-1 py-1 shadow-sm">
+                      <span className="text-sm text-zinc-300 font-medium">{supp}</span>
+                      <button onClick={() => handleRemoveDictSupp(supp)} className="p-1 text-zinc-500 hover:text-red-400 hover:bg-zinc-700 rounded-md transition-colors"><X size={14} /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            {/* 6. 休息計時器設定 */}
+            <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
+              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2"><Timer size={18} className="text-yellow-400"/><h2 className="font-bold">6. 休息計時器設定</h2></div>
               <div className="p-4 space-y-4">
                 <div className="flex items-center gap-4 bg-zinc-950/50 rounded-xl p-3 border border-zinc-800/50">
                   <div className="flex-1"><div className="text-sm font-bold text-zinc-300">預設倒數時間</div></div>
@@ -1106,7 +1154,7 @@ export default function FitnessApp() {
 
             {/* 6. 目標體重設定 */}
             <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
-              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2"><Weight size={18} className="text-pink-400"/><h2 className="font-bold">6. 目標體重設定</h2></div>
+              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2"><Weight size={18} className="text-pink-400"/><h2 className="font-bold">7. 目標體重設定</h2></div>
               <div className="p-4 space-y-4">
                 <div className="flex items-center gap-4 bg-zinc-950/50 rounded-xl p-3 border border-zinc-800/50">
                   <div className="flex-1"><div className="text-sm font-bold text-zinc-300">設定目標體重</div></div>
@@ -1120,7 +1168,7 @@ export default function FitnessApp() {
 
             {/* 7. 週期性計畫設定 */}
             <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
-              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2"><Repeat size={18} className="text-blue-400"/><h2 className="font-bold">7. 週期性補給計畫 (如肌酸循環)</h2></div>
+              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2"><Repeat size={18} className="text-blue-400"/><h2 className="font-bold">8. 週期性補給計畫 (如肌酸循環)</h2></div>
               <div className="p-4 space-y-4">
                 <button onClick={addDefaultCreatineCycle} className="w-full bg-blue-600/20 text-blue-400 border border-blue-500/50 hover:bg-blue-600/30 py-3 rounded-xl text-sm font-bold transition-all flex justify-center items-center gap-2">
                   <Plus size={16} /> 新增標準肌酸循環範本 (補充7天/維持45天/休息30天)
