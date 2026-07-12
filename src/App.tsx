@@ -25,7 +25,8 @@ import {
   Save,
   GripVertical,
   Repeat,
-  StopCircle
+  StopCircle,
+  Pencil
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -115,6 +116,10 @@ export default function FitnessApp() {
   // 密碼鎖相關
   const [inputPassword, setInputPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
+
+  // 各設定區塊的編輯模式
+  const [editSection, setEditSection] = useState({});
+  const toggleEdit = (key) => setEditSection(prev => ({ ...prev, [key]: !prev[key] }));
   
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [allLogs, setAllLogs] = useState({});
@@ -1080,15 +1085,23 @@ export default function FitnessApp() {
             
             {/* 1. 訓練大部位管理 */}
             <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
-              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2"><Target size={18} className="text-orange-400"/><h2 className="font-bold">1. 自訂大部位清單</h2></div>
+              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2"><Target size={18} className="text-orange-400"/><h2 className="font-bold">1. 自訂大部位清單</h2></div>
+                <button onClick={() => toggleEdit('parts')} className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold transition-colors ${editSection.parts ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-700/50 text-zinc-400 hover:text-zinc-200'}`}>{editSection.parts ? '完成' : <><Pencil size={12} /> 編輯</>}</button>
+              </div>
               <div className="p-4 space-y-4">
-                <div className="flex gap-2">
-                  <input type="text" value={newPart} onChange={(e) => setNewPart(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddPart()} placeholder="新增部位 (如：前臂)..." className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-orange-500" />
-                  <button onClick={handleAddPart} className="bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">新增</button>
-                </div>
+                {editSection.parts && (
+                  <div className="flex gap-2">
+                    <input type="text" value={newPart} onChange={(e) => setNewPart(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddPart()} placeholder="新增部位 (如：前臂)..." className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-orange-500" />
+                    <button onClick={handleAddPart} className="bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">新增</button>
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {settings.parts.map(part => (
-                    <div key={part} className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-lg pl-3 pr-1 py-1 shadow-sm"><span className="text-sm text-zinc-300 font-medium">{part}</span><button onClick={() => handleRemovePart(part)} className="p-1 text-zinc-500 hover:text-red-400 hover:bg-zinc-700 rounded-md transition-colors"><X size={14} /></button></div>
+                    <div key={part} className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-lg pl-3 pr-1 py-1 shadow-sm">
+                      <span className="text-sm text-zinc-300 font-medium">{part}</span>
+                      {editSection.parts && <button onClick={() => handleRemovePart(part)} className="p-1 text-zinc-500 hover:text-red-400 hover:bg-zinc-700 rounded-md transition-colors"><X size={14} /></button>}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -1096,7 +1109,10 @@ export default function FitnessApp() {
 
             {/* 2. 訓練動作管理 */}
             <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
-              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2"><Dumbbell size={18} className="text-emerald-400"/><h2 className="font-bold">2. 各部位動作菜單</h2></div>
+              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2"><Dumbbell size={18} className="text-emerald-400"/><h2 className="font-bold">2. 各部位動作菜單</h2></div>
+                <button onClick={() => toggleEdit('exercises')} className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold transition-colors ${editSection.exercises ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-700/50 text-zinc-400 hover:text-zinc-200'}`}>{editSection.exercises ? '完成' : <><Pencil size={12} /> 編輯</>}</button>
+              </div>
               <div className="p-4 space-y-4">
                 <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                   {settings.parts.map(part => (
@@ -1105,13 +1121,18 @@ export default function FitnessApp() {
                 </div>
                 {settingActivePart ? (
                   <div className="bg-zinc-950/50 rounded-xl p-4 border border-zinc-800/80 space-y-4">
-                    <div className="flex gap-2">
-                      <input type="text" value={newExercise} onChange={(e) => setNewExercise(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddExerciseToSettings()} placeholder="新增動作..." className="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                      <button onClick={handleAddExerciseToSettings} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">新增</button>
-                    </div>
+                    {editSection.exercises && (
+                      <div className="flex gap-2">
+                        <input type="text" value={newExercise} onChange={(e) => setNewExercise(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddExerciseToSettings()} placeholder="新增動作..." className="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                        <button onClick={handleAddExerciseToSettings} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">新增</button>
+                      </div>
+                    )}
                     <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
                       {(settings.exercises[settingActivePart] || []).map(ex => (
-                        <div key={ex} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-lg p-3"><span className="text-sm text-zinc-200">{ex}</span><button onClick={() => handleRemoveExerciseFromSettings(settingActivePart, ex)} className="text-zinc-500 hover:text-red-400 p-1.5 hover:bg-zinc-800 rounded-md transition-colors"><Trash2 size={16} /></button></div>
+                        <div key={ex} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-lg p-3">
+                          <span className="text-sm text-zinc-200">{ex}</span>
+                          {editSection.exercises && <button onClick={() => handleRemoveExerciseFromSettings(settingActivePart, ex)} className="text-zinc-500 hover:text-red-400 p-1.5 hover:bg-zinc-800 rounded-md transition-colors"><Trash2 size={16} /></button>}
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -1121,15 +1142,23 @@ export default function FitnessApp() {
 
             {/* 3. 補給品時段管理 */}
             <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
-              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2"><Clock size={18} className="text-blue-400"/><h2 className="font-bold">3. 補給品時段管理</h2></div>
+              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2"><Clock size={18} className="text-blue-400"/><h2 className="font-bold">3. 補給品時段管理</h2></div>
+                <button onClick={() => toggleEdit('periods')} className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold transition-colors ${editSection.periods ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-700/50 text-zinc-400 hover:text-zinc-200'}`}>{editSection.periods ? '完成' : <><Pencil size={12} /> 編輯</>}</button>
+              </div>
               <div className="p-4 space-y-4">
-                <div className="flex gap-2">
-                  <input type="text" value={newPeriod} onChange={(e) => setNewPeriod(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddPeriod()} placeholder="新增時段..." className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors" />
-                  <button onClick={handleAddPeriod} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">新增</button>
-                </div>
+                {editSection.periods && (
+                  <div className="flex gap-2">
+                    <input type="text" value={newPeriod} onChange={(e) => setNewPeriod(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddPeriod()} placeholder="新增時段..." className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors" />
+                    <button onClick={handleAddPeriod} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">新增</button>
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {(settings.supplementPeriods || []).map(period => (
-                    <div key={period} className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-lg pl-3 pr-1 py-1 shadow-sm"><span className="text-sm text-zinc-300 font-medium">{period}</span><button onClick={() => handleRemovePeriod(period)} className="p-1 text-zinc-500 hover:text-red-400 hover:bg-zinc-700 rounded-md transition-colors"><X size={14} /></button></div>
+                    <div key={period} className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-lg pl-3 pr-1 py-1 shadow-sm">
+                      <span className="text-sm text-zinc-300 font-medium">{period}</span>
+                      {editSection.periods && <button onClick={() => handleRemovePeriod(period)} className="p-1 text-zinc-500 hover:text-red-400 hover:bg-zinc-700 rounded-md transition-colors"><X size={14} /></button>}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -1137,18 +1166,23 @@ export default function FitnessApp() {
 
             {/* 4. 分段補給品設定 (支援拖曳排序) */}
             <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
-              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2"><Pill size={18} className="text-blue-400"/><h2 className="font-bold">4. 分段補給品設定 (可拖曳排序)</h2></div>
+              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2"><Pill size={18} className="text-blue-400"/><h2 className="font-bold">4. 分段補給品設定 (可拖曳排序)</h2></div>
+                <button onClick={() => toggleEdit('supps')} className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold transition-colors ${editSection.supps ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-700/50 text-zinc-400 hover:text-zinc-200'}`}>{editSection.supps ? '完成' : <><Pencil size={12} /> 編輯</>}</button>
+              </div>
               <div className="p-4 space-y-4">
-                <div className="flex gap-2">
-                  <select value={settingActivePeriod} onChange={(e) => setSettingActivePeriod(e.target.value)} className="bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-blue-500">
-                    {(settings.supplementPeriods || []).map(p => (<option key={p} value={p}>{p}</option>))}
-                  </select>
-                  <select value={newSupp} onChange={(e) => setNewSupp(e.target.value)} className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-zinc-200">
-                    <option value="">選擇補給品...</option>
-                    {(settings.supplementDictionary || SUPPLEMENT_DICTIONARY).map(supp => (<option key={supp} value={supp}>{supp}</option>))}
-                  </select>
-                  <button onClick={handleAddSupplement} disabled={!newSupp} className="bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0">新增</button>
-                </div>
+                {editSection.supps && (
+                  <div className="flex gap-2">
+                    <select value={settingActivePeriod} onChange={(e) => setSettingActivePeriod(e.target.value)} className="bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-blue-500">
+                      {(settings.supplementPeriods || []).map(p => (<option key={p} value={p}>{p}</option>))}
+                    </select>
+                    <select value={newSupp} onChange={(e) => setNewSupp(e.target.value)} className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-zinc-200">
+                      <option value="">選擇補給品...</option>
+                      {(settings.supplementDictionary || SUPPLEMENT_DICTIONARY).map(supp => (<option key={supp} value={supp}>{supp}</option>))}
+                    </select>
+                    <button onClick={handleAddSupplement} disabled={!newSupp} className="bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0">新增</button>
+                  </div>
+                )}
                 <div className="space-y-3">
                   {(settings.supplementPeriods || []).map((period) => {
                     const supps = settings.supplements[period];
@@ -1156,19 +1190,22 @@ export default function FitnessApp() {
                     return (
                       <div 
                         key={period} 
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, period)}
-                        onDragOver={handleDragOver}
-                        onDrop={(e) => handleDrop(e, period)}
+                        draggable={editSection.supps}
+                        onDragStart={(e) => editSection.supps && handleDragStart(e, period)}
+                        onDragOver={editSection.supps ? handleDragOver : undefined}
+                        onDrop={(e) => editSection.supps && handleDrop(e, period)}
                         className={`bg-zinc-950/50 rounded-xl p-3 border ${draggedPeriod === period ? 'border-blue-500/50 opacity-50' : 'border-zinc-800/50 hover:border-zinc-700'} transition-all`}
                       >
                         <div className="text-xs font-bold text-zinc-400 mb-2 flex items-center gap-2">
-                          <div className="cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400"><GripVertical size={14} /></div>
+                          {editSection.supps && <div className="cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400"><GripVertical size={14} /></div>}
                           {period}
                         </div>
-                        <div className="flex flex-wrap gap-2 pl-6">
+                        <div className={`flex flex-wrap gap-2 ${editSection.supps ? 'pl-6' : ''}`}>
                           {supps.map(supp => (
-                            <div key={supp} className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg pl-3 pr-1 py-1"><span className="text-sm text-zinc-200">{supp}</span><button onClick={() => handleRemoveSupplement(period, supp)} className="p-1 text-zinc-500 hover:text-red-400 hover:bg-zinc-700 rounded-md transition-colors"><X size={14} /></button></div>
+                            <div key={supp} className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg pl-3 pr-1 py-1">
+                              <span className="text-sm text-zinc-200">{supp}</span>
+                              {editSection.supps && <button onClick={() => handleRemoveSupplement(period, supp)} className="p-1 text-zinc-500 hover:text-red-400 hover:bg-zinc-700 rounded-md transition-colors"><X size={14} /></button>}
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -1180,17 +1217,22 @@ export default function FitnessApp() {
 
             {/* 5. 補給品清單管理 */}
             <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
-              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2"><Pill size={18} className="text-green-400"/><h2 className="font-bold">5. 補給品清單管理</h2></div>
+              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2"><Pill size={18} className="text-green-400"/><h2 className="font-bold">5. 補給品清單管理</h2></div>
+                <button onClick={() => toggleEdit('dict')} className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold transition-colors ${editSection.dict ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-700/50 text-zinc-400 hover:text-zinc-200'}`}>{editSection.dict ? '完成' : <><Pencil size={12} /> 編輯</>}</button>
+              </div>
               <div className="p-4 space-y-4">
-                <div className="flex gap-2">
-                  <input type="text" value={newDictSupp} onChange={(e) => setNewDictSupp(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddDictSupp()} placeholder="新增補給品名稱..." className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-green-500 transition-colors" />
-                  <button onClick={handleAddDictSupp} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">新增</button>
-                </div>
+                {editSection.dict && (
+                  <div className="flex gap-2">
+                    <input type="text" value={newDictSupp} onChange={(e) => setNewDictSupp(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddDictSupp()} placeholder="新增補給品名稱..." className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-green-500 transition-colors" />
+                    <button onClick={handleAddDictSupp} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">新增</button>
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {(settings.supplementDictionary || SUPPLEMENT_DICTIONARY).map(supp => (
                     <div key={supp} className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-lg pl-3 pr-1 py-1 shadow-sm">
                       <span className="text-sm text-zinc-300 font-medium">{supp}</span>
-                      <button onClick={() => handleRemoveDictSupp(supp)} className="p-1 text-zinc-500 hover:text-red-400 hover:bg-zinc-700 rounded-md transition-colors"><X size={14} /></button>
+                      {editSection.dict && <button onClick={() => handleRemoveDictSupp(supp)} className="p-1 text-zinc-500 hover:text-red-400 hover:bg-zinc-700 rounded-md transition-colors"><X size={14} /></button>}
                     </div>
                   ))}
                 </div>
@@ -1227,23 +1269,28 @@ export default function FitnessApp() {
 
             {/* 7. 週期性計畫設定 */}
             <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
-              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center gap-2"><Repeat size={18} className="text-blue-400"/><h2 className="font-bold">8. 週期性補給計畫 (如肌酸循環)</h2></div>
+              <div className="bg-zinc-800/40 p-4 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2"><Repeat size={18} className="text-blue-400"/><h2 className="font-bold">8. 週期性補給計畫 (如肌酸循環)</h2></div>
+                <button onClick={() => toggleEdit('cycles')} className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold transition-colors ${editSection.cycles ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-700/50 text-zinc-400 hover:text-zinc-200'}`}>{editSection.cycles ? '完成' : <><Pencil size={12} /> 編輯</>}</button>
+              </div>
               <div className="p-4 space-y-4">
-                <button onClick={addDefaultCreatineCycle} className="w-full bg-blue-600/20 text-blue-400 border border-blue-500/50 hover:bg-blue-600/30 py-3 rounded-xl text-sm font-bold transition-all flex justify-center items-center gap-2">
-                  <Plus size={16} /> 新增標準肌酸循環範本 (補充7天/維持45天/休息30天)
-                </button>
+                {editSection.cycles && (
+                  <button onClick={addDefaultCreatineCycle} className="w-full bg-blue-600/20 text-blue-400 border border-blue-500/50 hover:bg-blue-600/30 py-3 rounded-xl text-sm font-bold transition-all flex justify-center items-center gap-2">
+                    <Plus size={16} /> 新增標準肌酸循環範本 (補充7天/維持45天/休息30天)
+                  </button>
+                )}
                 
                 {settings.cycles && settings.cycles.map((cycle) => (
                   <div key={cycle.id} className="bg-zinc-950/50 rounded-xl p-4 border border-zinc-800/50 space-y-3">
                     <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
                       <span className="font-bold text-zinc-200">{cycle.name}</span>
-                      <button onClick={() => removeCycle(cycle.id)} className="text-zinc-500 hover:text-red-400 p-1 rounded transition-colors"><Trash2 size={16} /></button>
+                      {editSection.cycles && <button onClick={() => removeCycle(cycle.id)} className="text-zinc-500 hover:text-red-400 p-1 rounded transition-colors"><Trash2 size={16} /></button>}
                     </div>
                     <div className="flex items-center gap-2 text-sm text-zinc-400">
-                      起始日期: <input type="date" value={cycle.startDate} onChange={(e) => {
+                      起始日期: {editSection.cycles ? <input type="date" value={cycle.startDate} onChange={(e) => {
                         const updated = settings.cycles.map(c => c.id === cycle.id ? { ...c, startDate: e.target.value } : c);
                         saveSettingsToDB({ ...settings, cycles: updated });
-                      }} className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-zinc-200 outline-none focus:border-blue-500" />
+                      }} className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-zinc-200 outline-none focus:border-blue-500" /> : <span className="text-zinc-200">{cycle.startDate}</span>}
                     </div>
                     <div className="space-y-1 mt-2">
                       {cycle.phases.map((p, i) => (
