@@ -120,6 +120,9 @@ export default function FitnessApp() {
   // 各設定區塊的編輯模式
   const [editSection, setEditSection] = useState({});
   const toggleEdit = (key) => setEditSection(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // 前台編輯模式
+  const [mainEditMode, setMainEditMode] = useState(false);
   
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [allLogs, setAllLogs] = useState({});
@@ -801,6 +804,16 @@ export default function FitnessApp() {
         
         {view === 'main' ? (
           <>
+            {/* 前台編輯模式開關 */}
+            <div className="flex justify-end">
+              <button 
+                onClick={() => setMainEditMode(!mainEditMode)} 
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all ${mainEditMode ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700'}`}
+              >
+                <Pencil size={14} /> {mainEditMode ? '完成編輯' : '編輯'}
+              </button>
+            </div>
+
             {/* 週期追蹤卡片 */}
             {activeCyclesInfo.length > 0 && (
               <section className="space-y-3">
@@ -845,11 +858,11 @@ export default function FitnessApp() {
                   return (
                     <button
                       key={part}
-                      onClick={() => toggleTrainingPart(part)}
+                      onClick={() => mainEditMode && toggleTrainingPart(part)}
                       className={`px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200 border-2 ${
                         isSelected 
                           ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]' 
-                          : 'bg-zinc-950 border-zinc-700/50 text-zinc-400 hover:border-zinc-500'
+                          : `bg-zinc-950 border-zinc-700/50 text-zinc-400 ${mainEditMode ? 'hover:border-zinc-500' : 'opacity-60'}`
                       }`}
                     >
                       {part}
@@ -871,9 +884,11 @@ export default function FitnessApp() {
                         <h3 className="font-bold text-emerald-400 flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-emerald-500"></div>{part} 菜單
                         </h3>
-                        <button onClick={() => addExercise(part)} className="flex items-center gap-1 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-lg text-zinc-200 transition-colors">
-                          <Plus size={14} /> 新增動作
-                        </button>
+                        {mainEditMode && (
+                          <button onClick={() => addExercise(part)} className="flex items-center gap-1 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-lg text-zinc-200 transition-colors">
+                            <Plus size={14} /> 新增動作
+                          </button>
+                        )}
                       </div>
                       {exercisesForPart.length === 0 ? (
                         <p className="text-zinc-500 text-sm text-center py-4 bg-zinc-950/30 rounded-xl border border-dashed border-zinc-800">尚未新增動作</p>
@@ -895,13 +910,19 @@ export default function FitnessApp() {
                             return (
                               <div key={ex.id} className="bg-zinc-950/50 p-2.5 rounded-xl border border-zinc-800/50 space-y-3">
                                 <div className="grid grid-cols-[1fr_4rem_4rem_2rem] gap-2 items-center">
-                                  <select value={ex.name} onChange={(e) => updateExercise(ex.id, 'name', e.target.value)} className="bg-zinc-800 text-sm text-zinc-200 rounded-lg p-2 border border-zinc-700 focus:outline-none focus:border-emerald-500">
-                                    <option value="" disabled>請選擇</option>
-                                    {(settings.exercises[part] || []).map(opt => (<option key={opt} value={opt}>{opt}</option>))}
-                                  </select>
-                                  <input type="number" min="0" value={ex.sets || ''} onChange={(e) => updateExercise(ex.id, 'sets', e.target.value)} className="bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 focus:outline-none focus:border-emerald-500 w-full font-mono" placeholder="0" />
-                                  <input type="number" min="0" value={ex.weight || ''} onChange={(e) => updateExercise(ex.id, 'weight', e.target.value)} className="bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 focus:outline-none focus:border-emerald-500 w-full font-mono" placeholder="0" />
-                                  <button onClick={() => removeExercise(ex.id)} className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors flex justify-center"><Trash2 size={16} /></button>
+                                  {mainEditMode ? (
+                                    <select value={ex.name} onChange={(e) => updateExercise(ex.id, 'name', e.target.value)} className="bg-zinc-800 text-sm text-zinc-200 rounded-lg p-2 border border-zinc-700 focus:outline-none focus:border-emerald-500">
+                                      <option value="" disabled>請選擇</option>
+                                      {(settings.exercises[part] || []).map(opt => (<option key={opt} value={opt}>{opt}</option>))}
+                                    </select>
+                                  ) : (
+                                    <div className="text-sm text-zinc-200 rounded-lg p-2">{ex.name || '未選擇'}</div>
+                                  )}
+                                  <input type="number" min="0" value={ex.sets || ''} onChange={(e) => updateExercise(ex.id, 'sets', e.target.value)} disabled={!mainEditMode} className={`bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 w-full font-mono ${mainEditMode ? 'focus:outline-none focus:border-emerald-500' : 'opacity-70'}`} placeholder="0" />
+                                  <input type="number" min="0" value={ex.weight || ''} onChange={(e) => updateExercise(ex.id, 'weight', e.target.value)} disabled={!mainEditMode} className={`bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 w-full font-mono ${mainEditMode ? 'focus:outline-none focus:border-emerald-500' : 'opacity-70'}`} placeholder="0" />
+                                  {mainEditMode ? (
+                                    <button onClick={() => removeExercise(ex.id)} className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors flex justify-center"><Trash2 size={16} /></button>
+                                  ) : <div></div>}
                                 </div>
                                 <div className="bg-zinc-900/80 rounded-lg p-2 text-[11px] flex justify-between items-center border border-zinc-800/50">
                                   {prevRecord ? (
@@ -948,8 +969,8 @@ export default function FitnessApp() {
                             return (
                               <button
                                 key={supp}
-                                onClick={() => toggleSupplement(period, supp)}
-                                className={`flex items-center justify-between p-2.5 rounded-lg border transition-all duration-200 ${isChecked ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.1)]' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600'}`}
+                                onClick={() => mainEditMode && toggleSupplement(period, supp)}
+                                className={`flex items-center justify-between p-2.5 rounded-lg border transition-all duration-200 ${isChecked ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.1)]' : `bg-zinc-900 border-zinc-800 text-zinc-400 ${mainEditMode ? 'hover:border-zinc-600' : ''}`}`}
                               >
                                 <span className="text-sm font-medium truncate">{supp}</span>
                                 {isChecked && <CheckCircle2 size={16} className="text-blue-500 shrink-0" />}
@@ -974,7 +995,7 @@ export default function FitnessApp() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <input type="number" step="0.1" min="0" value={dailyWeight} onChange={(e) => { setDailyWeight(e.target.value); setIsDirty(true); }} placeholder="0.0" className="w-24 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-right text-lg font-bold text-pink-400 focus:outline-none focus:border-pink-500 transition-colors shadow-inner" />
+                <input type="number" step="0.1" min="0" value={dailyWeight} onChange={(e) => { setDailyWeight(e.target.value); setIsDirty(true); }} disabled={!mainEditMode} placeholder="0.0" className={`w-24 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-right text-lg font-bold text-pink-400 transition-colors shadow-inner ${mainEditMode ? 'focus:outline-none focus:border-pink-500' : 'opacity-70'}`} />
                 <span className="text-sm font-medium text-zinc-500">kg</span>
               </div>
             </section>
