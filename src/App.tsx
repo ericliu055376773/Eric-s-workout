@@ -982,6 +982,17 @@ export default function FitnessApp() {
                     </div>
                   );
                 })}
+
+                {/* 今日總訓練量 */}
+                {(() => {
+                  const totalVolume = dailyExercises.reduce((sum, ex) => sum + (Number(ex.weight) || 0) * (Number(ex.sets) || 0) * (Number(ex.reps) || 0), 0);
+                  return totalVolume > 0 ? (
+                    <div className="mt-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 flex items-center justify-between">
+                      <span className="text-sm font-bold text-emerald-400 flex items-center gap-2"><Flame size={16} /> 今日總訓練量</span>
+                      <span className="text-lg font-black text-emerald-400 font-mono">{totalVolume.toLocaleString()} kg</span>
+                    </div>
+                  ) : null;
+                })()}
               </section>
             )}
 
