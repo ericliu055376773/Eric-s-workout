@@ -376,6 +376,41 @@ export default function FitnessApp() {
     };
   }, [allLogs, analysisPart, dailyExercises, trainingParts, selectedDate]);
 
+  // 防止手機縮放
+  useEffect(() => {
+    // 設定 viewport meta
+    let meta = document.querySelector('meta[name="viewport"]');
+    if (meta) {
+      meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+    }
+
+    // 阻止雙指縮放
+    const preventZoom = (e) => { if (e.touches && e.touches.length > 1) e.preventDefault(); };
+    // 阻止雙擊縮放
+    let lastTap = 0;
+    const preventDoubleTap = (e) => {
+      const now = Date.now();
+      if (now - lastTap < 300) e.preventDefault();
+      lastTap = now;
+    };
+    // 阻止 Ctrl+滾輪縮放（桌面）
+    const preventWheelZoom = (e) => { if (e.ctrlKey) e.preventDefault(); };
+
+    document.addEventListener('touchstart', preventZoom, { passive: false });
+    document.addEventListener('touchend', preventDoubleTap, { passive: false });
+    document.addEventListener('wheel', preventWheelZoom, { passive: false });
+    document.documentElement.style.touchAction = 'manipulation';
+    document.body.style.touchAction = 'manipulation';
+    document.body.style.webkitTextSizeAdjust = '100%';
+    document.body.style.overscrollBehavior = 'none';
+
+    return () => {
+      document.removeEventListener('touchstart', preventZoom);
+      document.removeEventListener('touchend', preventDoubleTap);
+      document.removeEventListener('wheel', preventWheelZoom);
+    };
+  }, []);
+
   // 背景匿名登入 Firebase（只為了 Firestore 讀寫權限）
   useEffect(() => {
     if (!auth) {
@@ -896,7 +931,7 @@ export default function FitnessApp() {
                       ) : (
                         <div className="space-y-3">
                           <div className="grid grid-cols-[1fr_3rem_3rem_3rem_2rem] gap-1.5 text-[10px] text-zinc-500 font-medium px-1 uppercase tracking-wider">
-                            <div>動作名稱</div><div className="text-center">組數</div><div className="text-center">重量</div><div className="text-center">次數</div><div></div>
+                            <div>動作名稱</div><div className="text-center">重量</div><div className="text-center">組數</div><div className="text-center">次數</div><div></div>
                           </div>
                           {exercisesForPart.map(ex => {
                             const prevRecord = previousExercisesRecords[`${part}_${ex.name}`];
@@ -919,8 +954,8 @@ export default function FitnessApp() {
                                   ) : (
                                     <div className="text-sm text-zinc-200 rounded-lg p-2">{ex.name || '未選擇'}</div>
                                   )}
-                                  <input type="number" min="0" value={ex.sets || ''} onChange={(e) => updateExercise(ex.id, 'sets', e.target.value)} disabled={!mainEditMode} className={`bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 w-full font-mono ${mainEditMode ? 'focus:outline-none focus:border-emerald-500' : 'opacity-70'}`} placeholder="0" />
                                   <input type="number" min="0" value={ex.weight || ''} onChange={(e) => updateExercise(ex.id, 'weight', e.target.value)} disabled={!mainEditMode} className={`bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 w-full font-mono ${mainEditMode ? 'focus:outline-none focus:border-emerald-500' : 'opacity-70'}`} placeholder="0" />
+                                  <input type="number" min="0" value={ex.sets || ''} onChange={(e) => updateExercise(ex.id, 'sets', e.target.value)} disabled={!mainEditMode} className={`bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 w-full font-mono ${mainEditMode ? 'focus:outline-none focus:border-emerald-500' : 'opacity-70'}`} placeholder="0" />
                                   <input type="number" min="0" value={ex.reps || ''} onChange={(e) => updateExercise(ex.id, 'reps', e.target.value)} disabled={!mainEditMode} className={`bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 w-full font-mono ${mainEditMode ? 'focus:outline-none focus:border-emerald-500' : 'opacity-70'}`} placeholder="0" />
                                   {mainEditMode ? (
                                     <button onClick={() => removeExercise(ex.id)} className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors flex justify-center"><Trash2 size={16} /></button>
@@ -930,7 +965,7 @@ export default function FitnessApp() {
                                   {prevRecord ? (
                                     <div className="flex items-center gap-1.5 text-zinc-400">
                                       <History size={12} className="text-zinc-500" />
-                                      <span>上次 ({prevRecord.date.substring(5)}): {prevRecord.sets}組 x {prevRecord.weight}kg x {prevRecord.reps || 0}下</span>
+                                      <span>上次 ({prevRecord.date.substring(5)}): {prevRecord.weight}kg x {prevRecord.sets}組 x {prevRecord.reps || 0}下</span>
                                     </div>
                                   ) : (
                                     <div className="flex items-center gap-1.5 text-zinc-600"><History size={12} /><span>無歷史紀錄</span></div>
