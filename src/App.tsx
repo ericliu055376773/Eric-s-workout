@@ -247,7 +247,7 @@ export default function FitnessApp() {
       if (trainingParts.includes(part)) {
         const currentVol = dailyExercises
           .filter(e => e.part === part)
-          .reduce((sum, e) => sum + (Number(e.sets) * Number(e.weight)), 0);
+          .reduce((sum, e) => sum + (Number(e.sets) * Number(e.weight) * Number(e.reps || 0)), 0);
           
         if (currentVol > 0) {
           result[part] = { date: selectedDate, volume: currentVol };
@@ -261,7 +261,7 @@ export default function FitnessApp() {
           if (log.trainingParts?.includes(part)) {
             const vol = log.exercises
               ?.filter(e => e.part === part)
-              .reduce((sum, e) => sum + (Number(e.sets) * Number(e.weight)), 0) || 0;
+              .reduce((sum, e) => sum + (Number(e.sets) * Number(e.weight) * Number(e.reps || 0)), 0) || 0;
             if (vol > 0) {
               result[part] = { date, volume: vol };
               break;
@@ -291,7 +291,7 @@ export default function FitnessApp() {
             sets: ex.sets,
             weight: ex.weight,
             reps: ex.reps || 0,
-            volume: Number(ex.sets) * Number(ex.weight)
+            volume: Number(ex.sets) * Number(ex.weight) * Number(ex.reps || 0)
           };
         }
       });
@@ -342,7 +342,7 @@ export default function FitnessApp() {
       if (!log || !log.exercises) return 0;
       return log.exercises
         .filter(ex => ex.part === part)
-        .reduce((sum, ex) => sum + (Number(ex.sets) * Number(ex.weight)), 0);
+        .reduce((sum, ex) => sum + (Number(ex.sets) * Number(ex.weight) * Number(ex.reps || 0)), 0);
     };
 
     const currentVolume = calcVolume(currentLog, analysisPart);
@@ -353,7 +353,7 @@ export default function FitnessApp() {
     
     const todayLogTempVolume = dailyExercises
       .filter(ex => ex.part === analysisPart && trainingParts.includes(analysisPart))
-      .reduce((sum, ex) => sum + (Number(ex.sets) * Number(ex.weight)), 0);
+      .reduce((sum, ex) => sum + (Number(ex.sets) * Number(ex.weight) * Number(ex.reps || 0)), 0);
 
     if (trainingParts.includes(analysisPart) && todayLogTempVolume > 0 && selectedDate >= (currentLog?.date || '')) {
        actualCurrentVolume = todayLogTempVolume;
@@ -935,7 +935,7 @@ export default function FitnessApp() {
                           </div>
                           {exercisesForPart.map(ex => {
                             const prevRecord = previousExercisesRecords[`${part}_${ex.name}`];
-                            const currentVolume = Number(ex.sets || 0) * Number(ex.weight || 0);
+                            const currentVolume = Number(ex.sets || 0) * Number(ex.weight || 0) * Number(ex.reps || 0);
                             let progressStatus = null, diff = 0;
                             if (prevRecord && currentVolume > 0) {
                               diff = currentVolume - prevRecord.volume;
