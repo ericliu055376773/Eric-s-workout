@@ -290,6 +290,7 @@ export default function FitnessApp() {
             date,
             sets: ex.sets,
             weight: ex.weight,
+            reps: ex.reps || 0,
             volume: Number(ex.sets) * Number(ex.weight)
           };
         }
@@ -502,7 +503,7 @@ export default function FitnessApp() {
 
   const addExercise = (part) => {
     const defaultName = settings.exercises[part]?.[0] || '';
-    setDailyExercises(prev => [ ...prev, { id: Date.now().toString(), part, name: defaultName, sets: 0, weight: 0 } ]);
+    setDailyExercises(prev => [ ...prev, { id: Date.now().toString(), part, name: defaultName, sets: 0, weight: 0, reps: 0 } ]);
     setIsDirty(true);
   };
 
@@ -894,8 +895,8 @@ export default function FitnessApp() {
                         <p className="text-zinc-500 text-sm text-center py-4 bg-zinc-950/30 rounded-xl border border-dashed border-zinc-800">尚未新增動作</p>
                       ) : (
                         <div className="space-y-3">
-                          <div className="grid grid-cols-[1fr_4rem_4rem_2rem] gap-2 text-[10px] text-zinc-500 font-medium px-1 uppercase tracking-wider">
-                            <div>動作名稱</div><div className="text-center">組數</div><div className="text-center">重量</div><div></div>
+                          <div className="grid grid-cols-[1fr_3rem_3rem_3rem_2rem] gap-1.5 text-[10px] text-zinc-500 font-medium px-1 uppercase tracking-wider">
+                            <div>動作名稱</div><div className="text-center">組數</div><div className="text-center">重量</div><div className="text-center">次數</div><div></div>
                           </div>
                           {exercisesForPart.map(ex => {
                             const prevRecord = previousExercisesRecords[`${part}_${ex.name}`];
@@ -909,7 +910,7 @@ export default function FitnessApp() {
                             }
                             return (
                               <div key={ex.id} className="bg-zinc-950/50 p-2.5 rounded-xl border border-zinc-800/50 space-y-3">
-                                <div className="grid grid-cols-[1fr_4rem_4rem_2rem] gap-2 items-center">
+                                <div className="grid grid-cols-[1fr_3rem_3rem_3rem_2rem] gap-1.5 items-center">
                                   {mainEditMode ? (
                                     <select value={ex.name} onChange={(e) => updateExercise(ex.id, 'name', e.target.value)} className="bg-zinc-800 text-sm text-zinc-200 rounded-lg p-2 border border-zinc-700 focus:outline-none focus:border-emerald-500">
                                       <option value="" disabled>請選擇</option>
@@ -920,6 +921,7 @@ export default function FitnessApp() {
                                   )}
                                   <input type="number" min="0" value={ex.sets || ''} onChange={(e) => updateExercise(ex.id, 'sets', e.target.value)} disabled={!mainEditMode} className={`bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 w-full font-mono ${mainEditMode ? 'focus:outline-none focus:border-emerald-500' : 'opacity-70'}`} placeholder="0" />
                                   <input type="number" min="0" value={ex.weight || ''} onChange={(e) => updateExercise(ex.id, 'weight', e.target.value)} disabled={!mainEditMode} className={`bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 w-full font-mono ${mainEditMode ? 'focus:outline-none focus:border-emerald-500' : 'opacity-70'}`} placeholder="0" />
+                                  <input type="number" min="0" value={ex.reps || ''} onChange={(e) => updateExercise(ex.id, 'reps', e.target.value)} disabled={!mainEditMode} className={`bg-zinc-800 text-sm text-center text-zinc-200 rounded-lg p-2 border border-zinc-700 w-full font-mono ${mainEditMode ? 'focus:outline-none focus:border-emerald-500' : 'opacity-70'}`} placeholder="0" />
                                   {mainEditMode ? (
                                     <button onClick={() => removeExercise(ex.id)} className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors flex justify-center"><Trash2 size={16} /></button>
                                   ) : <div></div>}
@@ -928,7 +930,7 @@ export default function FitnessApp() {
                                   {prevRecord ? (
                                     <div className="flex items-center gap-1.5 text-zinc-400">
                                       <History size={12} className="text-zinc-500" />
-                                      <span>上次 ({prevRecord.date.substring(5)}): {prevRecord.sets}組 x {prevRecord.weight}kg</span>
+                                      <span>上次 ({prevRecord.date.substring(5)}): {prevRecord.sets}組 x {prevRecord.weight}kg x {prevRecord.reps || 0}下</span>
                                     </div>
                                   ) : (
                                     <div className="flex items-center gap-1.5 text-zinc-600"><History size={12} /><span>無歷史紀錄</span></div>
